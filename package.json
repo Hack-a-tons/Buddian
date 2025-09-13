@@ -1,0 +1,52 @@
+{
+  "name": "buddian",
+  "version": "1.0.0",
+  "description": "Modular, AI-powered Telegram bot with persistent memory capabilities",
+  "private": true,
+  "workspaces": [
+    "packages/*",
+    "convex"
+  ],
+  "scripts": {
+    "dev": "concurrently \"npm run dev:bot\" \"npm run dev:convex\"",
+    "dev:bot": "npm run dev --workspace=packages/bot",
+    "dev:convex": "npx convex dev",
+    "build": "npm run build --workspaces",
+    "build:bot": "npm run build --workspace=packages/bot",
+    "start": "npm run start --workspace=packages/bot",
+    "lint": "eslint . --ext .ts,.tsx",
+    "lint:fix": "eslint . --ext .ts,.tsx --fix",
+    "format": "prettier --write .",
+    "type-check": "tsc --noEmit",
+    "docker:build": "docker-compose build",
+    "docker:up": "docker-compose up -d",
+    "docker:down": "docker-compose down",
+    "docker:logs": "docker-compose logs -f"
+  },
+  "keywords": [
+    "telegram",
+    "bot",
+    "ai",
+    "convex",
+    "azure-openai",
+    "memory",
+    "multilingual"
+  ],
+  "author": "Buddian Team",
+  "license": "MIT",
+  "devDependencies": {
+    "@types/node": "^20.0.0",
+    "@typescript-eslint/eslint-plugin": "^6.0.0",
+    "@typescript-eslint/parser": "^6.0.0",
+    "concurrently": "^8.0.0",
+    "eslint": "^8.0.0",
+    "eslint-config-prettier": "^9.0.0",
+    "eslint-plugin-prettier": "^5.0.0",
+    "prettier": "^3.0.0",
+    "typescript": "^5.0.0"
+  },
+  "engines": {
+    "node": ">=18.0.0",
+    "npm": ">=9.0.0"
+  }
+}
