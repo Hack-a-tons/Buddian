@@ -805,7 +805,10 @@ echo "0 2 * * * /opt/backup-buddian.sh" | sudo crontab -
 3. **Database connection issues:**
    ```bash
    # Check Convex configuration
-   docker compose exec bot npx convex dashboard
+   docker compose run --rm convex-dev sh -c "convex dashboard"
+   
+   # Note: The convex-dev container includes the Convex CLI, while the bot container typically does not.
+   # You can also access the Convex dashboard directly at https://dashboard.convex.dev
    
    # Verify environment variables
    docker compose exec bot env | grep CONVEX
