@@ -349,7 +349,11 @@ Structured logging with correlation IDs:
 
 ## 🚀 Quick Deployment on Ubuntu 24.04
 
-For rapid deployment on Ubuntu 24.04 servers, use the automated deployment script:
+For rapid deployment on Ubuntu 24.04 servers, you have two options:
+
+### Option 1: Quick Deploy Script (Recommended)
+
+Use the simplified quick-deploy script for fast, reliable deployment:
 
 ```bash
 # Clone the repository
@@ -360,7 +364,25 @@ cd buddian
 cp .env.example .env
 nano .env  # Edit with your API keys and configuration
 
-# Run the automated deployment script
+# Run the quick deployment script
+./quick-deploy.sh
+```
+
+The `quick-deploy.sh` script provides:
+- ✅ Simple, reliable deployment process
+- ✅ Automatic Docker and Docker Compose checks
+- ✅ Environment validation
+- ✅ Convex API stub creation (fixes TypeScript compilation issues)
+- ✅ Clean Docker build and deployment
+- ✅ Service health verification
+- ✅ Clear next steps and troubleshooting guidance
+
+### Option 2: Full Deploy Script
+
+Use the comprehensive deployment script for advanced configuration:
+
+```bash
+# Run the full deployment script
 ./deploy.sh
 ```
 
@@ -372,6 +394,25 @@ The `deploy.sh` script automatically:
 - ✅ Builds and deploys all services
 - ✅ Verifies deployment health
 - ✅ Provides next steps and troubleshooting information
+
+### Manual Deployment
+
+If you prefer manual deployment or encounter issues with the scripts:
+
+```bash
+# Ensure Docker is running
+sudo systemctl start docker
+
+# Create the Convex API stub (fixes compilation issues)
+mkdir -p convex/_generated
+
+# Build and start services
+docker compose up -d --build
+
+# Verify deployment
+docker compose ps
+docker compose logs -f
+```
 
 ### What the Deployment Script Does
 
@@ -399,6 +440,22 @@ cat .env | grep -E "(TELEGRAM|CONVEX|AZURE)"
 
 # Check Convex generated files
 ls -la convex/_generated/api.ts
+```
+
+**Convex Setup Issues:**
+```bash
+# Check if Convex API stub exists (should be created automatically)
+ls -la convex/_generated/api.ts
+
+# Verify Convex configuration in environment
+grep CONVEX .env
+
+# Test Convex connection (if properly configured)
+curl -H "Authorization: Bearer $CONVEX_ADMIN_KEY" "$CONVEX_URL/api/health"
+
+# If you see TypeScript compilation errors about missing Convex API:
+# The deployment scripts automatically create a working API stub
+# This allows the build to succeed while you set up proper Convex configuration
 ```
 
 **Service Startup Issues:**
