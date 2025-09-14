@@ -1146,6 +1146,257 @@ This deployment configuration provides a production-ready setup with proper secu
 
 This section addresses common Docker build and deployment issues encountered when setting up Buddian, particularly on Ubuntu 24.04 servers.
 
+### Deploy Script Issues
+
+#### "main: command not found" Error
+
+**Issue**: The deploy.sh script fails with the error `./deploy.sh: line XXX: main: command not found` when running on Ubuntu servers.
+
+**Common Causes**:
+1. **File Permissions**: Script lacks execute permissions
+2. **Line Endings**: Windows CRLF line endings instead of Unix LF
+3. **Shell Compatibility**: Script not running with proper bash shell
+4. **Hidden Characters**: Invisible characters in the script file
+
+**Quick Fix - Use the Diagnostic Script**:
+
+The project includes a comprehensive diagnostic and fix script that automatically detects and resolves these issues:
+
+```bash
+# Run the diagnostic and fix script
+chmod +x fix-deploy.sh
+./fix-deploy.sh
+```
+
+The `fix-deploy.sh` script will:
+- ✅ Check and fix file permissions automatically
+- ✅ Convert Windows line endings to Unix format using multiple fallback methods
+- ✅ Validate shell compatibility and syntax
+- ✅ Test script execution with safe options
+- ✅ Create timestamped backups before making changes
+- ✅ Provide detailed troubleshooting information
+
+**Environment Variables for fix-deploy.sh**:
+- `FIX_ALLOW_INSTALL=1`: Allow automatic installation of dos2unix package
+- `FIX_RUN_TEST=1`: Enable actual script execution tests (uses --help and --dry-run)
+
+**Manual Troubleshooting Steps**:
+
+1. **Fix File Permissions**:
+   ```bash
+   # Add execute permissions
+   chmod +x deploy.sh
+   
+   # Verify permissions
+   ls -la deploy.sh
+   ```
+
+2. **Fix Line Endings**:
+   ```bash
+   # Using dos2unix (install if needed)
+   sudo apt install dos2unix
+   dos2unix deploy.sh
+   
+   # Or using perl fallback
+   perl -pi -e 's/\r$//' deploy.sh
+   
+   # Or using sed fallback
+   sed -i 's/\r$//' deploy.sh
+   ```
+
+3. **Check File Format**:
+   ```bash
+   # Check file type and line endings
+   file deploy.sh
+   
+   # Look for hidden characters
+   cat -A deploy.sh | head -20
+   ```
+
+4. **Run with Explicit Bash**:
+   ```bash
+   # Force bash execution
+   bash deploy.sh
+   
+   # Check bash availability
+   which bash
+   ```
+
+5. **Enable Debug Mode**:
+   ```bash
+   # Run with debugging enabled
+   DEPLOY_DEBUG=1 bash deploy.sh
+   
+   # Or use bash debug mode
+   bash -x deploy.sh
+   ```
+
+**Environment Setup for Ubuntu Servers**:
+
+```bash
+# Ensure proper environment
+export SHELL=/bin/bash
+export PATH="/usr/local/bin:/usr/bin:/bin:$PATH"
+
+# Verify system compatibility
+uname -a
+bash --version
+```
+
+**Common Error Messages and Solutions**:
+
+| Error Message | Cause | Solution |
+|---------------|-------|----------|
+| `main: command not found` | Function not found or script corruption | Use `fix-deploy.sh` or check line endings |
+| `Permission denied` | Missing execute permissions | `chmod +x deploy.sh` |
+| `bad interpreter` | Wrong shebang or line endings | Convert line endings with `dos2unix` |
+| `syntax error` | Script corruption or encoding issues | Re-download script or fix encoding |
+
+#### CRLF Prevention and Windows Setup
+
+**Issue**: Scripts downloaded or edited on Windows systems may have incorrect line endings (CRLF instead of LF), causing execution failures on Linux servers.
+
+**Prevention with .gitattributes**:
+
+The project includes a `.gitattributes` file that automatically ensures correct line endings:
+
+```gitattributes
+# Shell scripts should always use LF line endings
+*.sh text eol=lf
+
+# Other text files
+*.md text
+*.json text
+*.js text
+*.ts text
+```
+
+**Windows Development Setup**:
+
+1. **Configure Git for Line Endings**:
+   ```bash
+   # Set Git to handle line endings automatically
+   git config --global core.autocrlf input
+   
+   # For Windows-only development (not recommended for cross-platform)
+   git config --global core.autocrlf true
+   ```
+
+2. **Use WSL (Windows Subsystem for Linux)**:
+   ```bash
+   # Install WSL2 with Ubuntu
+   wsl --install -d Ubuntu
+   
+   # Clone repository in WSL
+   cd /mnt/c/projects
+   git clone https://github.com/your-org/buddian.git
+   cd buddian
+   
+   # Scripts will have correct line endings
+   file deploy.sh  # Should show "ASCII text"
+   ```
+
+3. **Configure Your Editor**:
+   
+   **VS Code**:
+   ```json
+   // settings.json
+   {
+     "files.eol": "\n",
+     "files.insertFinalNewline": true,
+     "files.trimTrailingWhitespace": true
+   }
+   ```
+   
+   **Notepad++**:
+   - Edit → EOL Conversion → Unix (LF)
+   - Settings → Preferences → New Document → Unix (LF)
+
+4. **Verify Line Endings Before Commit**:
+   ```bash
+   # Check line endings in files
+   git ls-files --eol
+   
+   # Fix line endings if needed
+   git add --renormalize .
+   git commit -m "Normalize line endings"
+   ```
+
+**Troubleshooting Windows-Related Issues**:
+
+1. **Check Current Line Endings**:
+   ```bash
+   # On Linux/WSL
+   file deploy.sh
+   hexdump -C deploy.sh | head -5
+   
+   # Look for \r\n (0d 0a) instead of \n (0a)
+   ```
+
+2. **Convert Line Endings**:
+   ```bash
+   # Multiple methods available in fix-deploy.sh
+   FIX_ALLOW_INSTALL=1 ./fix-deploy.sh
+   
+   # Manual conversion
+   dos2unix deploy.sh fix-deploy.sh
+   ```
+
+3. **Prevent Future Issues**:
+   ```bash
+   # Ensure .gitattributes is committed
+   git add .gitattributes
+   git commit -m "Add gitattributes for line ending consistency"
+   
+   # Re-normalize repository
+   git add --renormalize .
+   git commit -m "Normalize all line endings"
+   ```
+
+**Best Practices for Cross-Platform Development**:
+
+- **Always use Git**: Clone repositories with Git to respect `.gitattributes`
+- **Use WSL on Windows**: Develop in a Linux-like environment
+- **Configure editors**: Set editors to use LF line endings
+- **Test on target platform**: Always test scripts on the deployment platform
+- **Use the fix script**: Run `fix-deploy.sh` when in doubt
+
+**Advanced Debugging**:
+
+```bash
+# Check script syntax without execution
+bash -n deploy.sh
+
+# Show detailed execution trace
+bash -x deploy.sh 2>&1 | tee deploy-debug.log
+
+# Check for specific issues
+grep -n "main" deploy.sh
+grep -n "function main" deploy.sh
+```
+
+If the diagnostic script doesn't resolve the issue, the enhanced deploy.sh script now includes:
+- ✅ Built-in environment validation
+- ✅ Better error messages with troubleshooting steps
+- ✅ Debug mode support (`DEPLOY_DEBUG=1`)
+- ✅ Comprehensive file and permission checks
+- ✅ Enhanced error handling with line numbers
+
+**Using the Enhanced Deploy Script**:
+
+The updated deploy.sh script includes automatic validation and debugging features:
+
+```bash
+# Enable debug mode for detailed output
+DEPLOY_DEBUG=1 ./deploy.sh
+
+# The script now automatically:
+# - Validates bash environment
+# - Checks required files exist
+# - Provides detailed error messages
+# - Shows troubleshooting steps on failure
+```
+
 ### Convex Configuration Issues
 
 #### Convex Codegen Failures

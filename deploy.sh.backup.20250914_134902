@@ -1,21 +1,9 @@
-#!/usr/bin/env bash
-
-# Re-exec under bash if not already running under bash
-if [ -z "$BASH_VERSION" ]; then
-    exec bash "$0" "$@"
-fi
+#!/bin/bash
 
 # Buddian Deployment Script for Ubuntu 24.04
 # This script fixes Docker build issues and deploys Buddian successfully
 
-# Enable strict mode
-set -Eeuo pipefail
-
-# Safe IFS
-IFS=$'\n\t'
-
-# ERR trap for clear failures
-trap 'echo "ERROR: Script failed at line $LINENO with exit code $?" >&2; exit 1' ERR
+set -e  # Exit on any error
 
 # Script validation and environment detection
 validate_script_environment() {
@@ -65,82 +53,25 @@ check_required_files() {
     fi
 }
 
-
-# Function to show help/usage
-show_help() {
-    cat << 'EOF'
-Buddian Deployment Script for Ubuntu 24.04
-
-USAGE:
-    ./deploy.sh [OPTIONS]
-
-OPTIONS:
-    -h, --help              Show this help message and exit
-    --version               Show version information and exit
-    --dry-run               Validate configuration without deploying
-    --debug                 Enable debug output (same as DEPLOY_DEBUG=1)
-
-ENVIRONMENT VARIABLES:
-    DEPLOY_DEBUG=1          Enable debug output
-    RUN_CONVEX_DEPLOY=1     Deploy Convex schema to production
-    ALLOW_DEV_DEPLOY=1      Allow deployment with development credentials (not recommended)
-    FIX_ALLOW_INSTALL=1     Allow package installations in fix-deploy.sh
-    FIX_RUN_TEST=1          Run deployment test in fix-deploy.sh
-
-EXAMPLES:
-    ./deploy.sh             Normal deployment
-    ./deploy.sh --dry-run   Validate configuration only
-    DEPLOY_DEBUG=1 ./deploy.sh --debug  Deploy with debug output
-
-For troubleshooting, see the README.md file or run with --debug flag.
-EOF
+# Enhanced error handling function
+handle_error() {
+    local exit_code=$?
+    local line_number=$1
+    echo "ERROR: Script failed at line $line_number with exit code $exit_code"
+    echo "Command that failed: $BASH_COMMAND"
+    echo ""
+    echo "Troubleshooting steps:"
+    echo "1. Check file permissions: ls -la deploy.sh"
+    echo "2. Verify line endings: file deploy.sh"
+    echo "3. Run with debugging: DEPLOY_DEBUG=1 bash deploy.sh"
+    echo "4. Check system compatibility: uname -a"
+    echo "5. Verify bash installation: which bash"
+    echo ""
+    exit $exit_code
 }
 
-# Function to show version
-show_version() {
-    echo "Buddian Deployment Script v1.0.0"
-    echo "Compatible with Ubuntu 24.04"
-}
-
-# Parse command line arguments
-parse_arguments() {
-    local dry_run=false
-    
-    while [[ $# -gt 0 ]]; do
-        case $1 in
-            -h|--help)
-                show_help
-                exit 0
-                ;;
-            --version)
-                show_version
-                exit 0
-                ;;
-            --dry-run)
-                dry_run=true
-                shift
-                ;;
-            --debug)
-                export DEPLOY_DEBUG=1
-                shift
-                ;;
-            *)
-                echo "ERROR: Unknown option: $1" >&2
-                echo "Use --help for usage information." >&2
-                exit 1
-                ;;
-        esac
-    done
-    
-    # Set dry run mode if requested
-    if [[ "$dry_run" == "true" ]]; then
-        export DRY_RUN_MODE=1
-        log_info "Running in dry-run mode - no actual deployment will occur"
-    fi
-}
-
-# Parse arguments first
-parse_arguments "$@"
+# Set up error trap
+trap 'handle_error $LINENO' ERR
 
 # Run initial validations
 validate_script_environment
@@ -729,23 +660,12 @@ main() {
         exit 1
     fi
     
-    # Run validation steps
+    # Run all checks and deployment steps
     check_docker
     check_convex_dependency
     check_env_file
     validate_convex_credentials
     verify_convex_setup
-    
-    # If in dry-run mode, stop here
-    if [[ "${DRY_RUN_MODE:-}" == "1" ]]; then
-        echo ""
-        log_success "✅ Dry-run completed successfully!"
-        log_info "All validation checks passed. Ready for deployment."
-        log_info "Run without --dry-run to perform actual deployment."
-        return 0
-    fi
-    
-    # Run actual deployment steps
     cleanup_docker
     deploy_services
     verify_deployment
