@@ -152,11 +152,10 @@ create_convex_stub() {
     # Create directory if it doesn't exist
     mkdir -p "$stub_dir"
     
-    # Comment 1: Try npx convex codegen first
-    log_info "Attempting Convex codegen..."
-    if npx convex codegen 2>/dev/null; then
-        # Verify that codegen created proper FunctionReference types
-        if [[ -f "$stub_file" ]] && grep -q "FunctionReference" "$stub_file" 2>/dev/null; then
+    # Comment 1: Use Dockerized Convex codegen to avoid host-side Node
+    log_info "Attempting Convex codegen using Docker..."
+    if docker run --rm -u "$(id -u):$(id -g)" -v "$(pwd):/app" -w /app node:18-alpine npx convex codegen >/dev/null 2>&1; then
+        if [[ -f "convex/_generated/api.ts" ]] && grep -q "FunctionReference" "convex/_generated/api.ts"; then
             log_success "Convex codegen succeeded with proper FunctionReference types"
             return 0
         else
@@ -166,21 +165,39 @@ create_convex_stub() {
         log_info "Convex codegen failed or unavailable, falling back to stub generation"
     fi
     
-    # Comment 2: Use single authoritative stub generation script
+    # Use single authoritative stub generation script
     log_info "Using authoritative FunctionReference-based stub generation..."
     if [[ -f "scripts/gen-convex-stub.js" ]]; then
+        log_info "Running gen-convex-stub.js inside Docker container..."
+        
+        # Comment 2: Handle Docker failures properly with conditional wrapper
         if $force_stub; then
-            node scripts/gen-convex-stub.js --force
+            if docker run --rm -u "$(id -u):$(id -g)" -v "$(pwd):/app" -w /app node:18-alpine node scripts/gen-convex-stub.js --force; then
+                log_success "Convex API stub created successfully using gen-convex-stub.js in Docker"
+            else
+                log_error "Failed to create stub using gen-convex-stub.js in Docker"
+                return 1
+            fi
         else
-            node scripts/gen-convex-stub.js
+            if docker run --rm -u "$(id -u):$(id -g)" -v "$(pwd):/app" -w /app node:18-alpine node scripts/gen-convex-stub.js; then
+                log_success "Convex API stub created successfully using gen-convex-stub.js in Docker"
+            else
+                log_error "Failed to create stub using gen-convex-stub.js in Docker"
+                return 1
+            fi
         fi
         
-        if [[ $? -eq 0 ]]; then
-            log_success "Convex API stub created successfully using gen-convex-stub.js"
-        else
-            log_error "Failed to create stub using gen-convex-stub.js"
+        # Comment 3: Validate that both stub files exist after generation
+        if [[ ! -f "convex/_generated/api.ts" || ! -f "convex/_generated/api.d.ts" ]]; then
+            log_error "Stub generation did not produce expected files (api.ts and api.d.ts)"
             return 1
         fi
+        
+        # Optionally validate content
+        if ! grep -q "FunctionReference" "convex/_generated/api.ts"; then
+            log_warning "api.ts generated but missing expected FunctionReference typings"
+        fi
+        
     else
         log_error "gen-convex-stub.js script not found"
         return 1
@@ -278,7 +295,7 @@ main() {
     
     # Run deployment steps
     check_requirements
-    create_convex_stub
+    create_convex_stub "$@"
     deploy_application
     show_status
     
@@ -318,6 +335,6 @@ case "${1:-}" in
         log_success "Application restarted"
         ;;
     *)
-        main
+        main "$@"
         ;;
 esac
