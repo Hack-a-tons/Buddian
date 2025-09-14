@@ -204,6 +204,7 @@ export interface BotConfig {
     apiKey: string;
     apiVersion: string;
     deploymentName: string;
+    visionDeploymentName?: string;
   };
   vision?: {
     endpoint: string;

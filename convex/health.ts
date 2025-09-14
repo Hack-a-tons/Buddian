@@ -15,6 +15,46 @@ export const checkConnection = query({
   },
 });
 
+// Simple ping endpoint
+export const ping = query({
+  args: {},
+  handler: async (ctx, args) => {
+    return true;
+  },
+});
+
+// Get basic stats
+export const getStats = query({
+  args: {},
+  handler: async (ctx, args) => {
+    try {
+      // Count total users
+      const userCount = await ctx.db.query("users").collect().then(users => users.length);
+      
+      // Count total messages
+      const messageCount = await ctx.db.query("messages").collect().then(messages => messages.length);
+      
+      // Count total resources
+      const resourceCount = await ctx.db.query("resources").collect().then(resources => resources.length);
+      
+      return {
+        users: userCount,
+        messages: messageCount,
+        resources: resourceCount,
+        timestamp: Date.now()
+      };
+    } catch (error) {
+      return {
+        users: 0,
+        messages: 0,
+        resources: 0,
+        timestamp: Date.now(),
+        error: 'Failed to fetch stats'
+      };
+    }
+  },
+});
+
 // Record system health metrics
 export const recordHealthMetrics = mutation({
   args: {

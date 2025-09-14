@@ -5,33 +5,62 @@ import { v } from "convex/values";
 export const searchByKeywords = query({
   args: {
     chatId: v.string(),
-    keywords: v.string(),
+    keywords: v.array(v.string()),
     limit: v.optional(v.number())
   },
   handler: async (ctx, args) => {
     const limit = args.limit || 20;
+    const searchString = args.keywords.join(' ');
     
     // Search messages
     const messageResults = await ctx.db
       .query("messages")
       .withSearchIndex("search_content", (q) =>
-        q.search("content", args.keywords).eq("chatId", args.chatId)
+        q.search("content", searchString).eq("chatId", args.chatId)
       )
-      .take(limit);
+      .take(Math.floor(limit / 2));
 
     // Search resources
     const resourceResults = await ctx.db
       .query("resources")
       .withSearchIndex("search_content", (q) =>
-        q.search("content", args.keywords).eq("chatId", args.chatId)
+        q.search("content", searchString).eq("chatId", args.chatId)
       )
-      .take(limit);
+      .take(Math.floor(limit / 2));
 
-    return {
-      messages: messageResults,
-      resources: resourceResults,
-      total: messageResults.length + resourceResults.length
-    };
+    // Convert to SearchResult format
+    const results: any[] = [];
+    
+    messageResults.forEach(msg => {
+      results.push({
+        id: msg._id,
+        type: 'message',
+        content: msg.content,
+        relevanceScore: 0.8, // Placeholder score
+        context: `Message from ${msg.userId}`,
+        timestamp: msg.timestamp,
+        chatId: msg.chatId,
+        userId: msg.userId
+      });
+    });
+
+    resourceResults.forEach(resource => {
+      results.push({
+        id: resource._id,
+        type: 'resource',
+        content: resource.content,
+        relevanceScore: 0.7, // Placeholder score
+        context: `${resource.type} resource`,
+        timestamp: resource.extractedAt,
+        chatId: resource.chatId,
+        userId: resource.userId
+      });
+    });
+
+    // Sort by relevance score
+    results.sort((a, b) => b.relevanceScore - a.relevanceScore);
+
+    return results.slice(0, limit);
   },
 });
 
@@ -43,8 +72,6 @@ export const searchByContext = query({
     limit: v.optional(v.number())
   },
   handler: async (ctx, args) => {
-    // For now, this is a placeholder that does keyword search
-    // In a full implementation, this would use vector embeddings
     const limit = args.limit || 10;
     
     // Extract key terms from context for search
@@ -56,11 +83,7 @@ export const searchByContext = query({
       .join(" ");
 
     if (!searchTerms) {
-      return {
-        messages: [],
-        resources: [],
-        total: 0
-      };
+      return [];
     }
 
     // Search messages
@@ -69,7 +92,7 @@ export const searchByContext = query({
       .withSearchIndex("search_content", (q) =>
         q.search("content", searchTerms).eq("chatId", args.chatId)
       )
-      .take(limit);
+      .take(Math.floor(limit / 2));
 
     // Search resources
     const resourceResults = await ctx.db
@@ -77,30 +100,51 @@ export const searchByContext = query({
       .withSearchIndex("search_content", (q) =>
         q.search("content", searchTerms).eq("chatId", args.chatId)
       )
-      .take(limit);
+      .take(Math.floor(limit / 2));
 
-    return {
-      messages: messageResults,
-      resources: resourceResults,
-      total: messageResults.length + resourceResults.length
-    };
+    // Convert to SearchResult format
+    const results: any[] = [];
+    
+    messageResults.forEach(msg => {
+      results.push({
+        id: msg._id,
+        type: 'message',
+        content: msg.content,
+        relevanceScore: 0.7,
+        context: `Context search result`,
+        timestamp: msg.timestamp,
+        chatId: msg.chatId,
+        userId: msg.userId
+      });
+    });
+
+    resourceResults.forEach(resource => {
+      results.push({
+        id: resource._id,
+        type: 'resource',
+        content: resource.content,
+        relevanceScore: 0.6,
+        context: `${resource.type} resource`,
+        timestamp: resource.extractedAt,
+        chatId: resource.chatId,
+        userId: resource.userId
+      });
+    });
+
+    return results.slice(0, limit);
   },
 });
 
 // Get related content based on message ID
 export const getRelatedContent = query({
   args: {
-    messageId: v.id("messages"),
+    messageId: v.string(),
     limit: v.optional(v.number())
   },
   handler: async (ctx, args) => {
-    const message = await ctx.db.get(args.messageId);
+    const message = await ctx.db.get(args.messageId as any);
     if (!message) {
-      return {
-        messages: [],
-        resources: [],
-        total: 0
-      };
+      return [];
     }
 
     const limit = args.limit || 10;
@@ -114,11 +158,7 @@ export const getRelatedContent = query({
       .join(" ");
 
     if (!keywords) {
-      return {
-        messages: [],
-        resources: [],
-        total: 0
-      };
+      return [];
     }
 
     // Find related messages (excluding the original)
@@ -127,8 +167,8 @@ export const getRelatedContent = query({
       .withSearchIndex("search_content", (q) =>
         q.search("content", keywords).eq("chatId", message.chatId)
       )
-      .filter((q) => q.neq(q.field("_id"), args.messageId))
-      .take(limit);
+      .filter((q) => q.neq(q.field("_id"), args.messageId as any))
+      .take(Math.floor(limit / 2));
 
     // Find related resources
     const relatedResources = await ctx.db
@@ -136,13 +176,38 @@ export const getRelatedContent = query({
       .withSearchIndex("search_content", (q) =>
         q.search("content", keywords).eq("chatId", message.chatId)
       )
-      .take(limit);
+      .take(Math.floor(limit / 2));
 
-    return {
-      messages: relatedMessages,
-      resources: relatedResources,
-      total: relatedMessages.length + relatedResources.length
-    };
+    // Convert to SearchResult format
+    const results: any[] = [];
+    
+    relatedMessages.forEach(msg => {
+      results.push({
+        id: msg._id,
+        type: 'message',
+        content: msg.content,
+        relevanceScore: 0.6,
+        context: `Related to message`,
+        timestamp: msg.timestamp,
+        chatId: msg.chatId,
+        userId: msg.userId
+      });
+    });
+
+    relatedResources.forEach(resource => {
+      results.push({
+        id: resource._id,
+        type: 'resource',
+        content: resource.content,
+        relevanceScore: 0.5,
+        context: `Related ${resource.type}`,
+        timestamp: resource.extractedAt,
+        chatId: resource.chatId,
+        userId: resource.userId
+      });
+    });
+
+    return results.slice(0, limit);
   },
 });
 

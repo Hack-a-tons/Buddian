@@ -21,6 +21,7 @@ const envSchema = z.object({
   AZURE_OPENAI_KEY: z.string().min(1, 'Azure OpenAI key is required'),
   AZURE_OPENAI_API_VERSION: z.string().default('2024-02-15-preview'),
   AZURE_OPENAI_DEPLOYMENT_NAME: z.string().default('gpt-4'),
+  AZURE_OPENAI_VISION_DEPLOYMENT_NAME: z.string().optional(),
   
   // Optional Azure Vision configuration
   AZURE_VISION_ENDPOINT: z.string().url().optional(),
@@ -85,6 +86,9 @@ export const config: BotConfig = {
     apiKey: env.AZURE_OPENAI_KEY,
     apiVersion: env.AZURE_OPENAI_API_VERSION,
     deploymentName: env.AZURE_OPENAI_DEPLOYMENT_NAME,
+    ...(env.AZURE_OPENAI_VISION_DEPLOYMENT_NAME && {
+      visionDeploymentName: env.AZURE_OPENAI_VISION_DEPLOYMENT_NAME
+    }),
   },
   ...(env.AZURE_VISION_ENDPOINT && env.AZURE_VISION_KEY && {
     vision: {

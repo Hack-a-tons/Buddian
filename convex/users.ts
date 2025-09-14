@@ -14,9 +14,9 @@ export const getUser = query({
 
 // Get user by ID
 export const getUserById = query({
-  args: { id: v.id("users") },
+  args: { userId: v.string() },
   handler: async (ctx, args) => {
-    return await ctx.db.get(args.id);
+    return await ctx.db.get(args.userId as any);
   },
 });
 
@@ -56,28 +56,13 @@ export const createUser = mutation({
 });
 
 // Update user preferences
-export const updatePreferences = mutation({
+export const updateUserPreferences = mutation({
   args: {
-    id: v.id("users"),
-    preferences: v.object({
-      language: v.string(),
-      timezone: v.string(),
-      notifications: v.boolean(),
-      reminderFrequency: v.union(
-        v.literal("never"),
-        v.literal("daily"),
-        v.literal("weekly")
-      ),
-      summaryFrequency: v.union(
-        v.literal("never"),
-        v.literal("daily"),
-        v.literal("weekly")
-      ),
-      pluginsEnabled: v.array(v.string())
-    })
+    userId: v.string(),
+    preferences: v.any()
   },
   handler: async (ctx, args) => {
-    await ctx.db.patch(args.id, {
+    await ctx.db.patch(args.userId as any, {
       preferences: args.preferences
     });
   },
@@ -85,11 +70,20 @@ export const updatePreferences = mutation({
 
 // Update last active timestamp
 export const updateLastActive = mutation({
-  args: { id: v.id("users") },
+  args: { userId: v.string(), lastActiveAt: v.number() },
   handler: async (ctx, args) => {
-    await ctx.db.patch(args.id, {
-      lastActiveAt: Date.now()
+    await ctx.db.patch(args.userId as any, {
+      lastActiveAt: args.lastActiveAt
     });
+  },
+});
+
+// Get user language preference
+export const getUserLanguage = query({
+  args: { userId: v.string() },
+  handler: async (ctx, args) => {
+    const user = await ctx.db.get(args.userId as any);
+    return user?.preferences?.language || 'en';
   },
 });
 

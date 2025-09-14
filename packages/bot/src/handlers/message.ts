@@ -5,6 +5,7 @@ import openaiService from '@/services/openai';
 import contentAnalyzer from '@/services/content-analyzer';
 import languageUtils from '@/utils/language';
 import { telegramLogger, logError, logMessageProcessing, logUserAction } from '@/utils/logger';
+import { pluginManager } from '@/plugins/manager';
 import { 
   BotContext, 
   Message as BuddianMessage, 
@@ -162,6 +163,22 @@ export async function handleMessage(ctx: BotContext): Promise<void> {
     // Set context for further processing
     ctx.user = user;
     ctx.language = detectedLanguage;
+    
+    // Broadcast message event to plugins
+    try {
+      await pluginManager.broadcastEvent({
+        type: 'message_received',
+        data: { ...buddianMessage, id: storedMessageId },
+        context: { userId: user.id, chatId, language: detectedLanguage },
+        timestamp: Date.now()
+      });
+    } catch (error) {
+      logError(telegramLogger, error as Error, {
+        operation: 'plugin_event_broadcast',
+        messageId,
+        eventType: 'message_received'
+      });
+    }
     
     // Process different message types
     await processMessageContent(ctx, storedMessageId, buddianMessage);

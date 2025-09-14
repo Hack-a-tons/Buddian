@@ -5,10 +5,11 @@ import helmet from 'helmet';
 import { config, logConfiguration } from '@/config/env';
 import { botLogger, logStartup, logShutdown, logError } from '@/utils/logger';
 import { BotContext } from '@/types';
-import handleMessage from '@/handlers/message';
+import { handleMessage } from '@/handlers/message';
 import commandHandlers from '@/handlers/commands';
 import convexService from '@/services/convex';
 import openaiService from '@/services/openai';
+import { pluginManager } from '@/plugins/manager';
 
 // Initialize Express app for health checks and webhooks
 const app = express();
@@ -35,7 +36,7 @@ app.get('/health', (req, res) => {
 app.post('/webhook/telegram', (req, res) => {
   // Verify webhook secret
   const secretToken = req.headers['x-telegram-bot-api-secret-token'];
-  if (secretToken !== process.env.TELEGRAM_WEBHOOK_SECRET) {
+  if (secretToken !== process.env['TELEGRAM_WEBHOOK_SECRET']) {
     return res.status(401).send('Unauthorized');
   }
   
@@ -48,7 +49,7 @@ const bot = new Telegraf<BotContext>(config.telegram.token);
 
 // Error handling middleware
 bot.catch((err, ctx) => {
-  logError(botLogger, err, {
+  logError(botLogger, err as Error, {
     operation: 'bot_error',
     chatId: ctx.chat?.id.toString(),
     userId: ctx.from?.id.toString(),
@@ -70,20 +71,31 @@ bot.command('ping', commandHandlers.ping);
 bot.on('message', handleMessage);
 
 // Graceful shutdown handler
-const gracefulShutdown = (signal: string) => {
+const gracefulShutdown = async (signal: string) => {
   logShutdown(botLogger, 'buddian-bot', `Received ${signal}`, true);
   
   // Stop the bot
   bot.stop(signal);
   
+  // Shutdown plugin manager
+  if (config.plugins.enabled) {
+    await pluginManager.shutdown();
+    botLogger.info('🔌 Plugin manager shutdown');
+  }
+  
   // Close database connections
   convexService.cleanup();
   
-  // Close Express server
-  server.close(() => {
-    logShutdown(botLogger, 'express-server', 'Server closed', true);
+  // Close Express server if it exists
+  if (server) {
+    server.close(() => {
+      logShutdown(botLogger, 'express-server', 'Server closed', true);
+      process.exit(0);
+    });
+  } else {
+    logShutdown(botLogger, 'express-server', 'Server not started, proceeding to exit', true);
     process.exit(0);
-  });
+  }
   
   // Force exit after 10 seconds
   setTimeout(() => {
@@ -141,6 +153,12 @@ async function startApplication() {
       botLogger.info('✅ AI service connection established');
     }
     
+    // Initialize plugin manager
+    if (config.plugins.enabled) {
+      await pluginManager.initialize();
+      botLogger.info('🔌 Plugin manager initialized');
+    }
+    
     // Start Express server
     server = app.listen(config.app.port, () => {
       botLogger.info(`🚀 Express server listening on port ${config.app.port}`);
@@ -149,7 +167,9 @@ async function startApplication() {
     // Set up webhook or polling based on environment
     if (config.app.nodeEnv === 'production' && config.telegram.webhookUrl) {
       // Production: Use webhooks
-      const webhookOptions: any = {};
+      const webhookOptions: any = {
+        allowed_updates: config.telegram.allowedUpdates
+      };
       if (process.env['TELEGRAM_WEBHOOK_SECRET']) {
         webhookOptions.secret_token = process.env['TELEGRAM_WEBHOOK_SECRET'];
       }
@@ -158,7 +178,7 @@ async function startApplication() {
     } else {
       // Development: Use polling
       await bot.launch({
-        allowed_updates: config.telegram.allowedUpdates
+        allowedUpdates: config.telegram.allowedUpdates
       });
       botLogger.info('🔄 Bot started with polling for development');
     }

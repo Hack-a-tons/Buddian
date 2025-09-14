@@ -19,7 +19,20 @@ const openai = new OpenAI({
   },
 });
 
-// Initialize Azure Vision client if configured
+// Initialize Azure OpenAI Vision client if configured
+let openaiVision: OpenAI | null = null;
+if (openaiConfig.visionDeploymentName) {
+  openaiVision = new OpenAI({
+    apiKey: openaiConfig.apiKey,
+    baseURL: `${openaiConfig.endpoint}/openai/deployments/${openaiConfig.visionDeploymentName}`,
+    defaultQuery: { 'api-version': openaiConfig.apiVersion },
+    defaultHeaders: {
+      'api-key': openaiConfig.apiKey,
+    },
+  });
+}
+
+// Initialize Azure Vision client if configured (fallback)
 let visionClient: OpenAI | null = null;
 if (visionConfig) {
   visionClient = new OpenAI({
@@ -423,57 +436,69 @@ export const summaryService = {
   }
 };
 
-// Image analysis service (if Azure Vision is configured)
+// Image analysis service
 export const visionService = {
   async analyzeImage(imageUrl: string, language: string = 'en'): Promise<string> {
-    if (!visionClient) {
-      throw new OpenAIError('Azure Vision service not configured');
+    // Use Azure OpenAI Vision if configured
+    if (openaiVision) {
+      return executeOpenAIOperation(
+        async () => {
+          const response = await openaiVision.chat.completions.create({
+            model: openaiConfig.visionDeploymentName!,
+            messages: [
+              {
+                role: 'system',
+                content: `You are an expert at analyzing images and providing detailed descriptions.
+                Analyze the image and provide a comprehensive description in ${language}.
+                
+                Include:
+                - What you see in the image
+                - Key objects, people, or elements
+                - Context or setting
+                - Any text visible in the image
+                - Overall mood or atmosphere`
+              },
+              {
+                role: 'user',
+                content: [
+                  {
+                    type: 'text',
+                    text: 'Please analyze this image:'
+                  },
+                  {
+                    type: 'image_url',
+                    image_url: {
+                      url: imageUrl
+                    }
+                  }
+                ]
+              }
+            ],
+            temperature: 0.3,
+            max_tokens: 1000
+          });
+
+          return response.choices[0]?.message?.content || 'Could not analyze the image.';
+        },
+        'analyzeImage',
+        { imageUrl: imageUrl.substring(0, 100), language, client: 'azure-openai-vision' }
+      );
     }
 
-    return executeOpenAIOperation(
-      async () => {
-        // This would use Azure Computer Vision API
-        // For now, we'll use OpenAI's vision capabilities as a fallback
-        const response = await openai.chat.completions.create({
-          model: openaiConfig.deploymentName,
-          messages: [
-            {
-              role: 'system',
-              content: `You are an expert at analyzing images and providing detailed descriptions.
-              Analyze the image and provide a comprehensive description in ${language}.
-              
-              Include:
-              - What you see in the image
-              - Key objects, people, or elements
-              - Context or setting
-              - Any text visible in the image
-              - Overall mood or atmosphere`
-            },
-            {
-              role: 'user',
-              content: [
-                {
-                  type: 'text',
-                  text: 'Please analyze this image:'
-                },
-                {
-                  type: 'image_url',
-                  image_url: {
-                    url: imageUrl
-                  }
-                }
-              ]
-            }
-          ],
-          temperature: 0.3,
-          max_tokens: 1000
-        });
+    // Fallback to Azure Computer Vision if configured
+    if (visionClient) {
+      return executeOpenAIOperation(
+        async () => {
+          // This would use Azure Computer Vision API
+          // For now, return a placeholder message
+          throw new OpenAIError('Azure Computer Vision API integration not yet implemented');
+        },
+        'analyzeImage',
+        { imageUrl: imageUrl.substring(0, 100), language, client: 'azure-computer-vision' }
+      );
+    }
 
-        return response.choices[0]?.message?.content || 'Could not analyze the image.';
-      },
-      'analyzeImage',
-      { imageUrl: imageUrl.substring(0, 100), language }
-    );
+    throw new OpenAIError('No vision service configured. Please set AZURE_OPENAI_VISION_DEPLOYMENT_NAME or AZURE_VISION_* environment variables.');
   }
 };
 

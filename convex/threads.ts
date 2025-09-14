@@ -40,31 +40,22 @@ export const getThreadsByChat = query({
 
 // Get thread by ID
 export const getThread = query({
-  args: { id: v.id("threads") },
+  args: { threadId: v.string() },
   handler: async (ctx, args) => {
-    return await ctx.db.get(args.id);
+    return await ctx.db.get(args.threadId as any);
   },
 });
 
 // Update thread activity
 export const updateThreadActivity = mutation({
   args: { 
-    id: v.id("threads"),
-    incrementMessageCount: v.optional(v.boolean())
+    threadId: v.string(),
+    lastActivity: v.number()
   },
   handler: async (ctx, args) => {
-    const thread = await ctx.db.get(args.id);
-    if (!thread) return;
-
-    const updates: any = {
-      lastActivity: Date.now()
-    };
-
-    if (args.incrementMessageCount) {
-      updates.messageCount = thread.messageCount + 1;
-    }
-
-    await ctx.db.patch(args.id, updates);
+    await ctx.db.patch(args.threadId as any, {
+      lastActivity: args.lastActivity
+    });
   },
 });
 
