@@ -37,18 +37,37 @@ export const storeResource = mutation({
   },
 });
 
-// Get resources by chat ID
-export const getResourcesByChat = query({
+// Get resources - unified function that handles both chat filtering and type filtering
+export const getResources = query({
   args: { 
     chatId: v.string(),
+    type: v.optional(v.union(
+      v.literal("pdf"),
+      v.literal("image"),
+      v.literal("url"),
+      v.literal("video"),
+      v.literal("audio")
+    )),
     limit: v.optional(v.number())
   },
   handler: async (ctx, args) => {
-    return await ctx.db
-      .query("resources")
-      .withIndex("by_chat", (q) => q.eq("chatId", args.chatId))
-      .order("desc")
-      .take(args.limit || 50);
+    if (args.type) {
+      // Filter by both chat and type
+      return await ctx.db
+        .query("resources")
+        .withIndex("by_chat_type", (q) => 
+          q.eq("chatId", args.chatId).eq("type", args.type)
+        )
+        .order("desc")
+        .take(args.limit || 50);
+    } else {
+      // Filter by chat only
+      return await ctx.db
+        .query("resources")
+        .withIndex("by_chat", (q) => q.eq("chatId", args.chatId))
+        .order("desc")
+        .take(args.limit || 50);
+    }
   },
 });
 
@@ -62,30 +81,6 @@ export const getResourcesByUser = query({
     return await ctx.db
       .query("resources")
       .withIndex("by_user", (q) => q.eq("userId", args.userId))
-      .order("desc")
-      .take(args.limit || 50);
-  },
-});
-
-// Get resources by type
-export const getResourcesByType = query({
-  args: { 
-    chatId: v.string(),
-    type: v.union(
-      v.literal("pdf"),
-      v.literal("image"),
-      v.literal("url"),
-      v.literal("video"),
-      v.literal("audio")
-    ),
-    limit: v.optional(v.number())
-  },
-  handler: async (ctx, args) => {
-    return await ctx.db
-      .query("resources")
-      .withIndex("by_chat_type", (q) => 
-        q.eq("chatId", args.chatId).eq("type", args.type)
-      )
       .order("desc")
       .take(args.limit || 50);
   },
@@ -126,20 +121,20 @@ export const searchResources = query({
 
 // Get resource by ID
 export const getResource = query({
-  args: { id: v.id("resources") },
+  args: { resourceId: v.id("resources") },
   handler: async (ctx, args) => {
-    return await ctx.db.get(args.id);
+    return await ctx.db.get(args.resourceId);
   },
 });
 
 // Update resource summary
 export const updateResourceSummary = mutation({
   args: {
-    id: v.id("resources"),
+    resourceId: v.id("resources"),
     summary: v.string()
   },
   handler: async (ctx, args) => {
-    await ctx.db.patch(args.id, {
+    await ctx.db.patch(args.resourceId, {
       summary: args.summary
     });
   },

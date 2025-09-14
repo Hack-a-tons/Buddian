@@ -67,6 +67,36 @@ bot.command('remind', commandHandlers.remind);
 bot.command('settings', commandHandlers.settings);
 bot.command('ping', commandHandlers.ping);
 
+// Plugin commands handler
+bot.command('plugins', commandHandlers.plugins);
+
+// Generic command handler for plugin commands
+bot.hears(/^\/(\w+)(.*)/, async (ctx, next) => {
+  const match = ctx.match;
+  if (!match) return next();
+  
+  const commandName = match[1];
+  const argsString = match[2]?.trim() || '';
+  const args = argsString ? argsString.split(/\s+/) : [];
+  
+  // Check if this is a plugin command
+  if (config.plugins.enabled && pluginManager.hasCommand(commandName)) {
+    const executed = await pluginManager.executeCommand(commandName, ctx, args);
+    if (executed) {
+      botLogger.info('Plugin command executed', {
+        command: commandName,
+        args: args.length,
+        chatId: ctx.chat?.id.toString(),
+        userId: ctx.from?.id.toString()
+      });
+      return; // Command handled by plugin
+    }
+  }
+  
+  // If not handled by plugin, continue to next handler
+  return next();
+});
+
 // Message handler for all non-command messages
 bot.on('message', handleMessage);
 

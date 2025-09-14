@@ -62,11 +62,11 @@ export const updateThreadActivity = mutation({
 // Update thread summary
 export const updateThreadSummary = mutation({
   args: {
-    id: v.id("threads"),
+    threadId: v.id("threads"),
     summary: v.string()
   },
   handler: async (ctx, args) => {
-    await ctx.db.patch(args.id, {
+    await ctx.db.patch(args.threadId, {
       summary: args.summary
     });
   },

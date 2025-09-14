@@ -3,6 +3,8 @@ import { messageService, userService, resourceService, searchService } from '@/s
 import openaiService from '@/services/openai';
 import languageUtils from '@/utils/language';
 import { telegramLogger, logError, logUserAction } from '@/utils/logger';
+import { pluginManager } from '@/plugins/manager';
+import { formatSafeMarkdown, formatList, splitMessage, formatSearchResult } from '@/utils/formatting';
 
 // Start command handler
 export async function handleStart(ctx: BotContext): Promise<void> {
@@ -125,36 +127,38 @@ export async function handleSearch(ctx: BotContext): Promise<void> {
     const resourceResults = await resourceService.searchResources(chatId, query, 5);
     
     if (messageResults.length === 0 && resourceResults.length === 0) {
-      await ctx.reply(`🔍 No results found for "${query}". Try different keywords or check your spelling.`);
+      const noResultsMessage = formatSafeMarkdown(`🔍 No results found for "${query}". Try different keywords or check your spelling.`);
+      await ctx.reply(noResultsMessage, { parse_mode: 'MarkdownV2' });
       return;
     }
 
-    let responseMessage = `🔍 **Search Results for "${query}":**\n\n`;
+    let responseMessage = formatSafeMarkdown(`🔍 **Search Results for "${query}":**`, { escapeMarkdown: false }) + '\n\n';
     
     // Add message results
     if (messageResults.length > 0) {
-      responseMessage += `**💬 From Conversations:**\n`;
-      messageResults.slice(0, 5).forEach((result, index) => {
-        const preview = result.content.substring(0, 100) + (result.content.length > 100 ? '...' : '');
+      responseMessage += '**💬 From Conversations:**\n';
+      const messageItems = messageResults.slice(0, 5).map((result, index) => {
         const date = new Date(result.timestamp).toLocaleDateString();
-        responseMessage += `${index + 1}. ${preview} _(${date})_\n\n`;
+        return `${formatSafeMarkdown(result.content, { maxLength: 100 })} _(${date})_`;
       });
+      responseMessage += formatList(messageItems, { numbered: true, maxItems: 5 }) + '\n\n';
     }
     
     // Add resource results
     if (resourceResults.length > 0) {
-      responseMessage += `**📄 From Documents:**\n`;
-      resourceResults.forEach((result, index) => {
-        const preview = result.content.substring(0, 100) + (result.content.length > 100 ? '...' : '');
-        responseMessage += `${index + 1}. ${preview}\n\n`;
+      responseMessage += '**📄 From Documents:**\n';
+      const resourceItems = resourceResults.map((result) => {
+        return formatSafeMarkdown(result.content, { maxLength: 100 });
       });
+      responseMessage += formatList(resourceItems, { numbered: true, maxItems: 5 }) + '\n\n';
     }
     
-    if (responseMessage.length > 4000) {
-      responseMessage = responseMessage.substring(0, 3900) + '\n\n_Results truncated..._';
+    // Use splitMessage to handle long responses
+    const messageChunks = splitMessage(responseMessage);
+    
+    for (const chunk of messageChunks) {
+      await ctx.reply(chunk, { parse_mode: 'MarkdownV2' });
     }
-
-    await ctx.reply(responseMessage, { parse_mode: 'Markdown' });
     
     logUserAction(telegramLogger, userId, chatId, 'search_command', {
       query,
@@ -216,16 +220,20 @@ export async function handleSummary(ctx: BotContext): Promise<void> {
     // Generate key points
     const keyPoints = await openaiService.summary.generateKeyPoints(conversationText, 5);
 
-    let responseMessage = `📋 **Conversation Summary:**\n\n${summary}`;
+    let responseMessage = '📋 **Conversation Summary:**\n\n';
+    responseMessage += formatSafeMarkdown(summary, { maxLength: 1000 });
     
     if (keyPoints.length > 0) {
-      responseMessage += `\n\n**🔑 Key Points:**\n`;
-      keyPoints.forEach((point, index) => {
-        responseMessage += `${index + 1}. ${point}\n`;
-      });
+      responseMessage += '\n\n**🔑 Key Points:**\n';
+      responseMessage += formatList(keyPoints, { numbered: true, maxItems: 5 });
     }
 
-    await ctx.reply(responseMessage, { parse_mode: 'Markdown' });
+    // Use splitMessage to handle long responses
+    const messageChunks = splitMessage(responseMessage);
+    
+    for (const chunk of messageChunks) {
+      await ctx.reply(chunk, { parse_mode: 'MarkdownV2' });
+    }
     
     logUserAction(telegramLogger, userId, chatId, 'summary_command', {
       messageCount: recentMessages.length,
@@ -464,6 +472,82 @@ export async function handlePing(ctx: BotContext): Promise<void> {
   }
 }
 
+// Plugins command handler (list available plugin commands)
+export async function handlePlugins(ctx: BotContext): Promise<void> {
+  const userId = ctx.from?.id.toString();
+  const chatId = ctx.chat?.id.toString();
+  
+  if (!userId || !chatId) {
+    return;
+  }
+
+  try {
+    const availableCommands = pluginManager.getAvailableCommands();
+    const pluginStats = pluginManager.getPluginStats();
+    
+    if (availableCommands.length === 0) {
+      await ctx.reply('🔌 No plugins are currently loaded. Plugin system may be disabled or no plugins are available.');
+      return;
+    }
+
+    let responseMessage = `🔌 **Available Plugin Commands:**\n\n`;
+    
+    // Group commands by plugin
+    const commandsByPlugin = new Map<string, typeof availableCommands>();
+    availableCommands.forEach(({ plugin, command }) => {
+      if (!commandsByPlugin.has(plugin)) {
+        commandsByPlugin.set(plugin, []);
+      }
+      commandsByPlugin.get(plugin)!.push({ plugin, command });
+    });
+
+    // Display commands grouped by plugin
+    for (const [pluginName, commands] of commandsByPlugin) {
+      const pluginStat = pluginStats.find(stat => stat.name === pluginName);
+      const statusEmoji = pluginStat?.active ? '✅' : '❌';
+      
+      responseMessage += `**${statusEmoji} ${pluginName}** (v${pluginStat?.version || 'unknown'})\n`;
+      
+      commands.forEach(({ command }) => {
+        responseMessage += `• \`/${command.name}\` - ${command.description}\n`;
+        if (command.usage && command.usage !== `/${command.name}`) {
+          responseMessage += `  Usage: \`${command.usage}\`\n`;
+        }
+      });
+      
+      responseMessage += '\n';
+    }
+
+    // Add plugin statistics
+    if (pluginStats.length > 0) {
+      responseMessage += `**📊 Plugin Statistics:**\n`;
+      pluginStats.forEach(stat => {
+        const statusEmoji = stat.active ? '✅' : '❌';
+        responseMessage += `${statusEmoji} **${stat.name}**: ${stat.stats.executions} executions, ${stat.commandCount} commands\n`;
+      });
+    }
+
+    responseMessage += `\n💡 **Tip:** Use any plugin command by typing \`/commandname\`. Plugin commands are processed automatically!`;
+
+    await ctx.reply(responseMessage, { parse_mode: 'Markdown' });
+    
+    logUserAction(telegramLogger, userId, chatId, 'plugins_command', {
+      availableCommands: availableCommands.length,
+      activePlugins: pluginStats.filter(stat => stat.active).length,
+      totalPlugins: pluginStats.length
+    });
+    
+  } catch (error) {
+    logError(telegramLogger, error as Error, {
+      operation: 'plugins_command',
+      userId,
+      chatId
+    });
+    
+    await ctx.reply('Sorry, I couldn\'t load plugin information right now. Please try again.');
+  }
+}
+
 // Export all command handlers
 export default {
   start: handleStart,
@@ -473,5 +557,6 @@ export default {
   translate: handleTranslate,
   remind: handleRemind,
   settings: handleSettings,
-  ping: handlePing
+  ping: handlePing,
+  plugins: handlePlugins
 };
