@@ -111,7 +111,8 @@ AZURE_VISION_KEY=your_azure_vision_key_here
 The deploy script automatically:
 - ✅ Checks Docker and system requirements
 - ✅ Validates environment configuration
-- ✅ Creates TypeScript-compatible Convex API stub
+- ✅ Attempts Convex codegen with proper FunctionReference types
+- ✅ Falls back to authoritative TypeScript-compatible stub if codegen fails
 - ✅ Builds and deploys all services
 - ✅ Verifies deployment health
 - ✅ Provides status and management commands
@@ -141,6 +142,65 @@ curl -f https://your-domain.com/health
 # View real-time logs
 ./deploy.sh logs
 ```
+
+## 🔧 Development Setup
+
+### Local Development
+
+For local development, the project includes automatic Convex API stub generation to ensure TypeScript compatibility:
+
+```bash
+# Clone and install dependencies
+git clone https://github.com/your-org/buddian.git
+cd buddian
+npm install
+
+# The postinstall hook automatically runs:
+# npx convex codegen || node scripts/gen-convex-stub.js
+```
+
+### Convex API Stub Generation
+
+The project uses a sophisticated approach to handle Convex API types:
+
+1. **Primary Method**: Attempts `npx convex codegen` to generate proper API types
+2. **Fallback Method**: Uses `scripts/gen-convex-stub.js` to create FunctionReference-compatible stubs
+3. **Automatic Integration**: Both deploy.sh and Dockerfile use the same authoritative stub generation
+
+**Key Features**:
+- ✅ **FunctionReference Types**: Generates proper `FunctionReference<"query"|"mutation">` types
+- ✅ **TypeScript Compatible**: Satisfies all import requirements in `convex.ts`
+- ✅ **Consistent Behavior**: Same stub generation logic in development and production
+- ✅ **Graceful Fallback**: Never fails due to missing Convex configuration
+
+**Manual Stub Generation**:
+```bash
+# Generate stub manually
+node scripts/gen-convex-stub.js
+
+# Force regeneration
+node scripts/gen-convex-stub.js --force
+
+# Check generated files
+ls -la convex/_generated/
+```
+
+### Development Workflow
+
+1. **Initial Setup**:
+   ```bash
+   npm install  # Automatically generates API stub
+   ```
+
+2. **Development**:
+   ```bash
+   npm run dev  # Starts both bot and Convex dev server
+   ```
+
+3. **Production Build**:
+   ```bash
+   ./deploy.sh  # Handles stub generation automatically
+   ```
 
 ## 🔧 Configuration
 

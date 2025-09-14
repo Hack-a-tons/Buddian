@@ -137,11 +137,10 @@ wait_for_container_health() {
 
 # Function to create Convex API stub
 create_convex_stub() {
-    log_info "Checking Convex API stub requirements..."
+    log_info "Creating Convex API stub with proper FunctionReference types..."
     
     local stub_dir="convex/_generated"
     local stub_file="$stub_dir/api.ts"
-    local stub_dts_file="$stub_dir/api.d.ts"
     local force_stub=false
     
     # Check for --force-stub flag
@@ -153,201 +152,39 @@ create_convex_stub() {
     # Create directory if it doesn't exist
     mkdir -p "$stub_dir"
     
-    # Comment 1 & 2: Check if api.ts exists and contains proper FunctionReference API
-    if [[ -f "$stub_file" ]] && ! $force_stub; then
-        if grep -q "export const api" "$stub_file" && grep -q "FunctionReference" "$stub_file"; then
-            log_info "Convex API stub already exists with FunctionReference format - skipping creation"
+    # Comment 1: Try npx convex codegen first
+    log_info "Attempting Convex codegen..."
+    if npx convex codegen 2>/dev/null; then
+        # Verify that codegen created proper FunctionReference types
+        if [[ -f "$stub_file" ]] && grep -q "FunctionReference" "$stub_file" 2>/dev/null; then
+            log_success "Convex codegen succeeded with proper FunctionReference types"
             return 0
         else
-            log_warning "Existing api.ts does not match FunctionReference format - will recreate"
+            log_warning "Convex codegen succeeded but did not create proper FunctionReference types"
         fi
-    elif [[ -f "$stub_file" ]] && ! $force_stub; then
-        log_info "Convex API stub already exists - skipping creation (use --force-stub to override)"
-        return 0
-    fi
-    
-    # Comment 3: Check if api.d.ts exists and skip if not forcing
-    if [[ -f "$stub_dts_file" ]] && ! $force_stub; then
-        log_info "Convex API type definitions already exist - skipping creation"
     else
-        # Only create api.d.ts if missing or forcing, and mimic Convex FilterApi style
-        log_info "Creating Convex API type definitions..."
-        cat > "$stub_dts_file" << 'EOF'
-/* eslint-disable */
-/**
- * Generated `api` utility stub for deployment.
- *
- * THIS CODE IS AUTOMATICALLY GENERATED FOR DEPLOYMENT.
- *
- * @module
- */
-
-import type {
-  ApiFromModules,
-  FilterApi,
-  FunctionReference,
-} from "convex/server";
-
-/**
- * A utility for referencing Convex functions in your app's API.
- *
- * Usage:
- * ```js
- * const myFunctionReference = api.myModule.myFunction;
- * ```
- */
-declare const fullApi: ApiFromModules<{
-  health: any;
-  messages: any;
-  resources: any;
-  search: any;
-  threads: any;
-  users: any;
-}>;
-export declare const api: FilterApi<
-  typeof fullApi,
-  FunctionReference<any, "public">
->;
-export declare const internal: FilterApi<
-  typeof fullApi,
-  FunctionReference<any, "internal">
->;
-EOF
-        log_success "Convex API type definitions created"
+        log_info "Convex codegen failed or unavailable, falling back to stub generation"
     fi
     
-    # Comment 1: Create FunctionReference-based API stub
-    log_info "Creating FunctionReference-based Convex API stub..."
-    cat > "$stub_file" << 'EOF'
-/**
- * Generated Convex API stub for deployment
- * This file contains FunctionReference-shaped objects for TypeScript compatibility
- */
-
-import { FunctionReference } from "convex/server";
-
-// Factory functions to create FunctionReference-shaped objects
-function q(name: string): FunctionReference<"query"> {
-  return {
-    _type: "query",
-    _name: name,
-    _visibility: "public",
-    _args: {},
-    _returnType: {},
-    _componentPath: undefined
-  } as FunctionReference<"query">;
-}
-
-function m(name: string): FunctionReference<"mutation"> {
-  return {
-    _type: "mutation",
-    _name: name,
-    _visibility: "public",
-    _args: {},
-    _returnType: {},
-    _componentPath: undefined
-  } as FunctionReference<"mutation">;
-}
-
-// Health module functions
-export const health = {
-  checkConnection: q("health:checkConnection"),
-  ping: q("health:ping"),
-  getStats: q("health:getStats"),
-  recordHealthMetrics: m("health:recordHealthMetrics"),
-  getSystemHealth: q("health:getSystemHealth"),
-  getComponentHealth: q("health:getComponentHealth"),
-  getOverallStatus: q("health:getOverallStatus"),
-  cleanupHealthRecords: m("health:cleanupHealthRecords"),
-  getHealthMetricsSummary: q("health:getHealthMetricsSummary"),
-};
-
-// Messages module functions  
-export const messages = {
-  storeMessage: m("messages:storeMessage"),
-  getMessage: q("messages:getMessage"),
-  getMessages: q("messages:getMessages"),
-  searchMessages: q("messages:searchMessages"),
-  getThreadContext: q("messages:getThreadContext"),
-  updateMessageDecisions: m("messages:updateMessageDecisions"),
-  updateMessageActionItems: m("messages:updateMessageActionItems"),
-  getMessagesByUser: q("messages:getMessagesByUser"),
-  getMessagesByThread: q("messages:getMessagesByThread"),
-  getMessagesWithDecisions: q("messages:getMessagesWithDecisions"),
-  getMessagesWithActionItems: q("messages:getMessagesWithActionItems"),
-  getMessageStats: q("messages:getMessageStats"),
-  deleteOldMessages: m("messages:deleteOldMessages"),
-};
-
-// Users module functions
-export const users = {
-  getUser: q("users:getUser"),
-  getUserById: q("users:getUserById"),
-  createUser: m("users:createUser"),
-  updateUserPreferences: m("users:updateUserPreferences"),
-  updateLastActive: m("users:updateLastActive"),
-  getUserLanguage: q("users:getUserLanguage"),
-  getActiveUsers: q("users:getActiveUsers"),
-  getUserStats: q("users:getUserStats"),
-};
-
-// Resources module functions
-export const resources = {
-  storeResource: m("resources:storeResource"),
-  getResources: q("resources:getResources"),
-  getResourcesByUser: q("resources:getResourcesByUser"),
-  searchResources: q("resources:searchResources"),
-  getResource: q("resources:getResource"),
-  updateResourceSummary: m("resources:updateResourceSummary"),
-  deleteResource: m("resources:deleteResource"),
-  getRecentResources: q("resources:getRecentResources"),
-  getResourceStats: q("resources:getResourceStats"),
-};
-
-// Threads module functions
-export const threads = {
-  createThread: m("threads:createThread"),
-  getThreadsByChat: q("threads:getThreadsByChat"),
-  getThread: q("threads:getThread"),
-  updateThreadActivity: m("threads:updateThreadActivity"),
-  updateThreadSummary: m("threads:updateThreadSummary"),
-  addThreadTags: m("threads:addThreadTags"),
-  removeThreadTags: m("threads:removeThreadTags"),
-  searchThreads: q("threads:searchThreads"),
-  getActiveThreads: q("threads:getActiveThreads"),
-  getThreadsByTags: q("threads:getThreadsByTags"),
-  getThreadStats: q("threads:getThreadStats"),
-  deleteThread: m("threads:deleteThread"),
-  getThreadMessages: q("threads:getThreadMessages"),
-  assignMessageToThread: m("threads:assignMessageToThread"),
-};
-
-// Search module functions
-export const search = {
-  searchByKeywords: q("search:searchByKeywords"),
-  searchByContext: q("search:searchByContext"),
-  getRelatedContent: q("search:getRelatedContent"),
-  indexContent: m("search:indexContent"),
-  searchAll: q("search:searchAll"),
-  getSearchSuggestions: q("search:getSearchSuggestions"),
-  getPopularSearchTerms: q("search:getPopularSearchTerms"),
-};
-
-// Main API export
-export const api = {
-  health,
-  messages,
-  users,
-  resources,
-  threads,
-  search,
-};
-
-export default api;
-EOF
-    
-    log_success "FunctionReference-based Convex API stub created successfully"
-    log_debug "Created files: $stub_file and $stub_dts_file"
+    # Comment 2: Use single authoritative stub generation script
+    log_info "Using authoritative FunctionReference-based stub generation..."
+    if [[ -f "scripts/gen-convex-stub.js" ]]; then
+        if $force_stub; then
+            node scripts/gen-convex-stub.js --force
+        else
+            node scripts/gen-convex-stub.js
+        fi
+        
+        if [[ $? -eq 0 ]]; then
+            log_success "Convex API stub created successfully using gen-convex-stub.js"
+        else
+            log_error "Failed to create stub using gen-convex-stub.js"
+            return 1
+        fi
+    else
+        log_error "gen-convex-stub.js script not found"
+        return 1
+    fi
 }
 
 # Function to build and deploy

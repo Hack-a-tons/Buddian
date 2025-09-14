@@ -43,37 +43,18 @@ COPY packages/bot/tsconfig.json ./
 COPY packages/bot/src ./src
 COPY convex ./convex
 
-# Create stub files if they don't exist or don't match FunctionReference format
-RUN mkdir -p convex/_generated && \
-    if [ ! -f "convex/_generated/api.ts" ] || ! grep -q "FunctionReference" "convex/_generated/api.ts" 2>/dev/null; then \
-        echo "Creating FunctionReference-based Convex API stub for Docker build..." && \
-        echo 'import { FunctionReference } from "convex/server";' > convex/_generated/api.ts && \
-        echo 'function q(name: string): FunctionReference<"query"> { return { _type: "query", _name: name, _visibility: "public", _args: {}, _returnType: {}, _componentPath: undefined } as FunctionReference<"query">; }' >> convex/_generated/api.ts && \
-        echo 'function m(name: string): FunctionReference<"mutation"> { return { _type: "mutation", _name: name, _visibility: "public", _args: {}, _returnType: {}, _componentPath: undefined } as FunctionReference<"mutation">; }' >> convex/_generated/api.ts && \
-        echo 'export const health = { checkConnection: q("health:checkConnection"), ping: q("health:ping"), getStats: q("health:getStats") };' >> convex/_generated/api.ts && \
-        echo 'export const messages = { storeMessage: m("messages:storeMessage"), getMessage: q("messages:getMessage"), getMessages: q("messages:getMessages") };' >> convex/_generated/api.ts && \
-        echo 'export const users = { getUser: q("users:getUser"), createUser: m("users:createUser") };' >> convex/_generated/api.ts && \
-        echo 'export const resources = { storeResource: m("resources:storeResource"), getResources: q("resources:getResources") };' >> convex/_generated/api.ts && \
-        echo 'export const threads = { createThread: m("threads:createThread"), getActiveThreads: q("threads:getActiveThreads") };' >> convex/_generated/api.ts && \
-        echo 'export const search = { searchByKeywords: q("search:searchByKeywords"), searchByContext: q("search:searchByContext") };' >> convex/_generated/api.ts && \
-        echo 'export const api = { health, messages, users, resources, threads, search }; export default api;' >> convex/_generated/api.ts; \
-    fi && \
-    if [ ! -f "convex/_generated/api.d.ts" ]; then \
-        echo "Creating Convex API type definitions for Docker build..." && \
-        echo 'import type { ApiFromModules, FilterApi, FunctionReference } from "convex/server";' > convex/_generated/api.d.ts && \
-        echo 'declare const fullApi: ApiFromModules<{ health: any; messages: any; resources: any; search: any; threads: any; users: any; }>;' >> convex/_generated/api.d.ts && \
-        echo 'export declare const api: FilterApi<typeof fullApi, FunctionReference<any, "public">>;' >> convex/_generated/api.d.ts && \
-        echo 'export declare const internal: FilterApi<typeof fullApi, FunctionReference<any, "internal">>;' >> convex/_generated/api.d.ts; \
-    fi
+# Copy the stub generation script
+COPY scripts/gen-convex-stub.js ./scripts/
 
-# Attempt Convex codegen
-RUN echo "Attempting Convex codegen..." && \
-    npx convex codegen || echo "Convex codegen failed or unavailable"
-
-# If codegen succeeded, remove the container's stub; otherwise rely on container's stub
-RUN if [ -f convex/_generated/api.js ] && [ -f convex/_generated/api.d.ts ]; then \
-      echo "Codegen succeeded - removing container's stub" && \
-      rm -f convex/_generated/api.ts; \
+# Create stub files using the same authoritative approach as deploy.sh
+RUN echo "Creating Convex API stub with proper FunctionReference types..." && \
+    mkdir -p convex/_generated && \
+    echo "Attempting Convex codegen..." && \
+    if npx convex codegen 2>/dev/null && [ -f "convex/_generated/api.ts" ] && grep -q "FunctionReference" "convex/_generated/api.ts" 2>/dev/null; then \
+        echo "Convex codegen succeeded with proper FunctionReference types"; \
+    else \
+        echo "Convex codegen failed or unavailable, using authoritative stub generation..." && \
+        node scripts/gen-convex-stub.js --force; \
     fi
 
 RUN npm run build

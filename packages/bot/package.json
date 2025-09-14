@@ -10,7 +10,8 @@
     "clean": "rm -rf dist",
     "type-check": "tsc --noEmit",
     "lint": "eslint src --ext .ts",
-    "lint:fix": "eslint src --ext .ts --fix"
+    "lint:fix": "eslint src --ext .ts --fix",
+    "postinstall": "npx convex codegen || node ../../scripts/gen-convex-stub.js"
   },
   "dependencies": {
     "axios": "^1.6.0",
