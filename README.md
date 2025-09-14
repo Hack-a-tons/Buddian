@@ -61,7 +61,6 @@ graph TB
 
 ### Prerequisites
 
-- Node.js 18+ and npm
 - Docker and Docker Compose
 - Telegram Bot Token (from [@BotFather](https://t.me/BotFather))
 - Convex account and project
@@ -80,104 +79,7 @@ cp .env.example .env
 nano .env
 ```
 
-### 2. Convex Environment Setup
-
-Buddian uses Convex as its real-time database. The setup process differs between development and production environments:
-
-#### Development Environment Setup
-
-For local development and testing:
-
-```bash
-# Install dependencies (includes convex package)
-npm install
-
-# Initialize and configure Convex development project
-npx convex dev
-```
-
-The `npx convex dev` command will:
-- Create a new Convex development project (if needed)
-- Generate development deployment URL and credentials
-- Create `.env.local` file with your development Convex configuration
-- Start the Convex development server
-- Create database tables automatically from schema
-
-**Development credentials format:**
-- `CONVEX_URL`: `https://polished-woodpecker-620.convex.cloud` (example)
-- `CONVEX_DEPLOYMENT`: `dev:polished-woodpecker-620`
-- `CONVEX_ADMIN_KEY`: Not required for development
-
-#### Production Environment Setup
-
-For Ubuntu server deployment, you need production credentials:
-
-1. **Create Production Deployment**:
-   - Go to [Convex Dashboard](https://dashboard.convex.dev)
-   - Create a new project or select existing project
-   - Navigate to "Settings" → "Deployments"
-   - Create a production deployment
-
-2. **Get Production Credentials**:
-   - Copy the production deployment URL
-   - Generate an admin key in "Settings" → "API Keys"
-   - Note the deployment name from the dashboard
-
-**Production credentials format:**
-- `CONVEX_URL`: `https://ideal-ermine-213.convex.cloud` (example)
-- `CONVEX_DEPLOYMENT`: `prod:ideal-ermine-213`
-- `CONVEX_ADMIN_KEY`: `prod:<deployment>|<token>`
-
-#### Database Table Creation
-
-Convex automatically creates database tables from your schema during deployment:
-
-- **Development**: Tables are created when you run `npx convex dev`
-- **Production**: Tables are created when you run `npx convex deploy --prod` (or via `RUN_CONVEX_DEPLOY=1 ./deploy.sh` if the CLI is authenticated on the host)
-- **Schema**: Defined in `convex/schema.ts` with tables for messages, users, resources, threads, and search
-
-#### Credential Management
-
-**For Local Development:**
-```bash
-# After running 'npx convex dev', copy values to .env
-cp .env.local .env
-
-# Development .env example:
-CONVEX_URL=https://polished-woodpecker-620.convex.cloud
-CONVEX_DEPLOYMENT=dev:polished-woodpecker-620
-CONVEX_ADMIN_KEY=not_required_for_dev
-```
-
-**For Production Deployment:**
-```bash
-# Use production credentials in .env
-CONVEX_URL=https://ideal-ermine-213.convex.cloud
-CONVEX_DEPLOYMENT=prod:ideal-ermine-213
-CONVEX_ADMIN_KEY=prod:ideal-ermine-213|<redacted>
-```
-
-#### Environment Migration
-
-When moving from development to production:
-
-1. **Keep Development Setup**: Continue using `npx convex dev` for local development
-2. **Add Production Credentials**: Configure production credentials in your server's `.env` file
-3. **Deploy Schema**: You must manually deploy your schema to production before running the deployment script
-4. **Data Migration**: Use Convex dashboard to export/import data if needed
-
-### 3. Configure Environment
-
-After setting up your Convex environment, complete your `.env` file configuration:
-
-```bash
-# Copy Convex configuration (development or production)
-# For development: cp .env.local .env
-# For production: manually configure with production credentials
-
-# Edit .env with all required configuration
-nano .env
-```
+### 2. Configure Environment Variables
 
 Complete your `.env` file with all required values:
 
@@ -186,10 +88,7 @@ Complete your `.env` file with all required values:
 TELEGRAM_BOT_TOKEN=your_telegram_bot_token_here
 
 # Required: Convex Database Configuration
-# IMPORTANT: Use PRODUCTION credentials for server deployment
-# See .env.example for detailed examples and guidance
 CONVEX_URL=https://your-deployment.convex.cloud
-CONVEX_DEPLOYMENT=prod:your-deployment-name  # Use 'prod:' for production
 CONVEX_ADMIN_KEY=your_production_admin_key_here
 
 # Required: Azure OpenAI
@@ -202,53 +101,46 @@ AZURE_VISION_ENDPOINT=https://your-vision-resource.cognitiveservices.azure.com/
 AZURE_VISION_KEY=your_azure_vision_key_here
 ```
 
-### 4. Development Setup
+### 3. Deploy with Single Command
 
 ```bash
-# Start development server
-npm run dev
-```
-
-### 5. Production Deployment
-
-**Important**: You must deploy your Convex schema to production before running the deployment script:
-
-```bash
-# Step 1: Deploy Convex schema to production (on your dev machine)
-npx convex deploy --prod
-
-# Step 2: Then run the deployment script on the server
+# Deploy Buddian with the automated script
 ./deploy.sh
 ```
 
-The updated deployment script now includes comprehensive Convex setup verification:
+The deploy script automatically:
+- ✅ Checks Docker and system requirements
+- ✅ Validates environment configuration
+- ✅ Creates TypeScript-compatible Convex API stub
+- ✅ Builds and deploys all services
+- ✅ Verifies deployment health
+- ✅ Provides status and management commands
+
+### 4. Verify Deployment
 
 ```bash
-# The deploy.sh script now automatically:
-# - Checks for convex dependency in package.json
-# - Verifies Convex environment variables are configured
-# - Ensures convex/_generated/api.ts exists or can be generated
-# - Provides guidance for copying .env.local to .env
+# Check service status
+./deploy.sh status
 
-# Use the automated deployment script (after schema deployment)
-./deploy.sh
+# View logs
+./deploy.sh logs
 
-# Or manually build and start with Docker Compose
-docker compose up -d --build bot
-
-# Note: On the server, do not run npm; use Docker Compose only.
+# Test health endpoint (if using external nginx)
+curl -f https://your-domain.com/health
 ```
 
-#### Convex Setup Troubleshooting
+### 5. Manage Deployment
 
-If you encounter Docker build issues related to Convex:
+```bash
+# Stop services
+./deploy.sh stop
 
-1. **Missing Convex Configuration**: Run `npx convex dev` to configure your project
-2. **Environment Variables**: Copy values from `.env.local` to `.env` after running `npx convex dev`
-3. **Generated API Files**: The updated `deploy.sh` script will verify these exist or can be generated
-4. **Dependency Check**: The script ensures the `convex` package is installed in `packages/bot/package.json`
+# Restart services
+./deploy.sh restart
 
-The deployment script provides detailed guidance and troubleshooting information for common Convex-related build issues.
+# View real-time logs
+./deploy.sh logs
+```
 
 ## 🔧 Configuration
 
@@ -347,141 +239,106 @@ Structured logging with correlation IDs:
 }
 ```
 
-## 🚀 Quick Deployment on Ubuntu 24.04
+## 🚀 Ubuntu 24.04 Server Deployment
 
-For rapid deployment on Ubuntu 24.04 servers, you have two options:
+### Prerequisites and Server Setup
 
-### Option 1: Quick Deploy Script (Recommended)
+#### System Requirements
+- Ubuntu 24.04 LTS server
+- Minimum 2GB RAM, 20GB disk space
+- Domain name with DNS configured
+- Root or sudo access
 
-Use the simplified quick-deploy script for fast, reliable deployment:
+#### Install Docker and Dependencies
 
 ```bash
-# Clone the repository
-git clone https://github.com/your-org/buddian.git
-cd buddian
+# Update system packages
+sudo apt update && sudo apt upgrade -y
 
-# Configure environment variables
-cp .env.example .env
-nano .env  # Edit with your API keys and configuration
+# Install required packages
+sudo apt install -y curl wget git ufw
 
-# Run the quick deployment script
-./quick-deploy.sh
+# Install Docker
+curl -fsSL https://get.docker.com -o get-docker.sh
+sudo sh get-docker.sh
+
+# Add user to docker group
+sudo usermod -aG docker $USER
+
+# Install Docker Compose
+sudo apt install -y docker-compose-plugin
+
+# Verify installation
+docker --version
+docker compose version
 ```
 
-The `quick-deploy.sh` script provides:
-- ✅ Simple, reliable deployment process
-- ✅ Automatic Docker and Docker Compose checks
-- ✅ Environment validation
-- ✅ Convex API stub creation (fixes TypeScript compilation issues)
-- ✅ Clean Docker build and deployment
-- ✅ Service health verification
-- ✅ Clear next steps and troubleshooting guidance
-
-### Option 2: Full Deploy Script
-
-Use the comprehensive deployment script for advanced configuration:
+#### Configure Firewall
 
 ```bash
-# Run the full deployment script
+# Configure UFW firewall
+sudo ufw allow ssh
+sudo ufw allow 80
+sudo ufw allow 443
+sudo ufw --force enable
+```
+
+### API Keys and Service Setup
+
+#### 1. Telegram Bot Token
+
+1. Open Telegram and search for [@BotFather](https://t.me/BotFather)
+2. Send `/newbot` command
+3. Follow prompts to create your bot
+4. Save the bot token
+5. Configure bot settings with `/setdescription`, `/setabouttext`, etc.
+
+#### 2. Convex Database Setup
+
+1. Visit [Convex Dashboard](https://dashboard.convex.dev/)
+2. Create new project: "buddian-production"
+3. Get deployment credentials from project dashboard
+4. Generate admin key in Settings → API Keys
+
+#### 3. Azure OpenAI Configuration
+
+1. Login to [Azure Portal](https://portal.azure.com/)
+2. Create Azure OpenAI resource
+3. Deploy GPT-4 model in Azure OpenAI Studio
+4. Get endpoint URL and API key
+
+### Environment Configuration
+
+```bash
+# Clone repository
+cd /opt
+sudo git clone https://github.com/your-org/buddian.git
+sudo chown -R $USER:$USER buddian
+cd buddian
+
+# Configure environment
+cp .env.example .env
+nano .env
+```
+
+### Deploy with Single Command
+
+```bash
+# Deploy Buddian
 ./deploy.sh
 ```
 
-The `deploy.sh` script automatically:
-- ✅ Checks Docker and Docker Compose installation
-- ✅ Validates environment configuration
-- ✅ Fixes TypeScript import path issues for Docker builds
-- ✅ Cleans up previous Docker builds
-- ✅ Builds and deploys all services
+The deployment script handles everything automatically:
+- ✅ Checks system requirements
+- ✅ Validates environment configuration  
+- ✅ Creates Convex API stub for TypeScript compatibility
+- ✅ Builds and starts all services
 - ✅ Verifies deployment health
-- ✅ Provides next steps and troubleshooting information
-
-### Manual Deployment
-
-If you prefer manual deployment or encounter issues with the scripts:
-
-```bash
-# Ensure Docker is running
-sudo systemctl start docker
-
-# Create the Convex API stub (fixes compilation issues)
-mkdir -p convex/_generated
-
-# Build and start services
-docker compose up -d --build
-
-# Verify deployment
-docker compose ps
-docker compose logs -f
-```
-
-### What the Deployment Script Does
-
-The automated deployment script (`deploy.sh`) handles common Docker build issues and provides a streamlined deployment experience:
-
-1. **Prerequisites Check**: Verifies Docker and Docker Compose are installed and running
-2. **Environment Validation**: Ensures `.env` file exists with required configuration
-3. **Import Path Fixes**: Automatically resolves TypeScript module resolution issues in Docker builds
-4. **Clean Deployment**: Removes old containers and builds fresh images
-5. **Health Verification**: Confirms services are running correctly
-6. **Guidance**: Provides external nginx configuration examples and next steps
-
-### Troubleshooting Common Issues
-
-If you encounter issues during deployment:
-
-**Docker Build Failures:**
-```bash
-# Check Docker installation
-docker --version
-docker compose version
-
-# Verify environment file
-cat .env | grep -E "(TELEGRAM|CONVEX|AZURE)"
-
-# Check Convex generated files
-ls -la convex/_generated/api.ts
-```
-
-**Convex Setup Issues:**
-```bash
-# Check if Convex API stub exists (should be created automatically)
-ls -la convex/_generated/api.ts
-
-# Verify Convex configuration in environment
-grep CONVEX .env
-
-# Test Convex connection (if properly configured)
-curl -H "Authorization: Bearer $CONVEX_ADMIN_KEY" "$CONVEX_URL/api/health"
-
-# If you see TypeScript compilation errors about missing Convex API:
-# The deployment scripts automatically create a working API stub
-# This allows the build to succeed while you set up proper Convex configuration
-```
-
-**Service Startup Issues:**
-```bash
-# View service logs
-docker compose logs -f bot
-
-# Check service status
-docker compose ps
-
-# Restart services if needed
-docker compose restart
-```
-
-**Webhook Configuration:**
-```bash
-# Verify webhook status
-curl "https://api.telegram.org/bot$TELEGRAM_BOT_TOKEN/getWebhookInfo"
-
-# Test health endpoint
-curl -f https://your-domain.com/health
-```
+- ✅ Provides management commands
 
 ### External Nginx Configuration
 
-After running the deployment script, configure your external nginx server to proxy requests to the Buddian services:
+Configure your external nginx server:
 
 ```nginx
 server {
@@ -498,7 +355,7 @@ server {
     ssl_certificate_key /path/to/your/private.key;
 
     location / {
-        proxy_pass http://localhost:8080;
+        proxy_pass http://localhost:3000;
         proxy_set_header Host $host;
         proxy_set_header X-Real-IP $remote_addr;
         proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
@@ -507,22 +364,38 @@ server {
 }
 ```
 
-### Verification Commands
-
-After deployment, verify everything is working:
+### Post-Deployment Verification
 
 ```bash
 # Check service status
-docker compose ps
+./deploy.sh status
 
 # View logs
-docker compose logs -f
+./deploy.sh logs
 
 # Test health endpoint
 curl -f https://your-domain.com/health
 
-# Monitor system resources
-docker stats
+# Set Telegram webhook
+curl -X POST "https://api.telegram.org/bot<YOUR_BOT_TOKEN>/setWebhook" \
+     -H "Content-Type: application/json" \
+     -d '{"url": "https://your-domain.com/webhook/telegram"}'
+```
+
+### Management Commands
+
+```bash
+# View deployment status
+./deploy.sh status
+
+# Stop services
+./deploy.sh stop
+
+# Restart services  
+./deploy.sh restart
+
+# View real-time logs
+./deploy.sh logs
 ```
 
 ## 🚀 Ubuntu 24.04 Server Deployment

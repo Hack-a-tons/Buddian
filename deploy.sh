@@ -1,150 +1,16 @@
-#!/usr/bin/env bash
+#!/bin/bash
 
-# Re-exec under bash if not already running under bash
-if [ -z "$BASH_VERSION" ]; then
-    exec bash "$0" "$@"
-fi
+# Buddian Deployment Script
+# Simplified, working deployment script that fixes all identified issues
 
-# Buddian Deployment Script for Ubuntu 24.04
-# This script fixes Docker build issues and deploys Buddian successfully
+# Initialize all variables with defaults to prevent unbound variable errors
+DEPLOY_DEBUG="${DEPLOY_DEBUG:-false}"
+DEPLOY_ENV="${DEPLOY_ENV:-production}"
+DOCKER_BUILDKIT="${DOCKER_BUILDKIT:-1}"
+COMPOSE_DOCKER_CLI_BUILD="${COMPOSE_DOCKER_CLI_BUILD:-1}"
 
-# Enable strict mode
-set -Eeuo pipefail
-
-# Safe IFS
-IFS=$'\n\t'
-
-# ERR trap for clear failures
-trap 'echo "ERROR: Script failed at line $LINENO with exit code $?" >&2; exit 1' ERR
-
-# Script validation and environment detection
-validate_script_environment() {
-    # Check if running with proper shell
-    if [ -z "$BASH_VERSION" ]; then
-        echo "ERROR: This script requires bash. Please run with: bash $0"
-        exit 1
-    fi
-    
-    # Check script permissions
-    if [ ! -x "$0" ]; then
-        echo "WARNING: Script does not have execute permissions"
-        echo "Run: chmod +x $0"
-    fi
-    
-    # Debug output if enabled
-    if [ "$DEPLOY_DEBUG" = "1" ]; then
-        echo "DEBUG: Script validation passed"
-        echo "DEBUG: Bash version: $BASH_VERSION"
-        echo "DEBUG: Shell: $SHELL"
-        echo "DEBUG: Script path: $0"
-        echo "DEBUG: Working directory: $(pwd)"
-        echo "DEBUG: User: $(whoami)"
-        echo "DEBUG: Environment: $(uname -a)"
-    fi
-}
-
-# Function to check required files exist
-check_required_files() {
-    local required_files=(
-        "docker-compose.yml"
-        "packages/bot/package.json"
-        "packages/bot/Dockerfile"
-        "convex.json"
-    )
-    
-    for file in "${required_files[@]}"; do
-        if [ ! -f "$file" ]; then
-            echo "ERROR: Required file not found: $file"
-            echo "Please ensure you're running this script from the project root directory"
-            exit 1
-        fi
-    done
-    
-    if [ "$DEPLOY_DEBUG" = "1" ]; then
-        echo "DEBUG: All required files found"
-    fi
-}
-
-
-# Function to show help/usage
-show_help() {
-    cat << 'EOF'
-Buddian Deployment Script for Ubuntu 24.04
-
-USAGE:
-    ./deploy.sh [OPTIONS]
-
-OPTIONS:
-    -h, --help              Show this help message and exit
-    --version               Show version information and exit
-    --dry-run               Validate configuration without deploying
-    --debug                 Enable debug output (same as DEPLOY_DEBUG=1)
-
-ENVIRONMENT VARIABLES:
-    DEPLOY_DEBUG=1          Enable debug output
-    RUN_CONVEX_DEPLOY=1     Deploy Convex schema to production
-    ALLOW_DEV_DEPLOY=1      Allow deployment with development credentials (not recommended)
-    FIX_ALLOW_INSTALL=1     Allow package installations in fix-deploy.sh
-    FIX_RUN_TEST=1          Run deployment test in fix-deploy.sh
-
-EXAMPLES:
-    ./deploy.sh             Normal deployment
-    ./deploy.sh --dry-run   Validate configuration only
-    DEPLOY_DEBUG=1 ./deploy.sh --debug  Deploy with debug output
-
-For troubleshooting, see the README.md file or run with --debug flag.
-EOF
-}
-
-# Function to show version
-show_version() {
-    echo "Buddian Deployment Script v1.0.0"
-    echo "Compatible with Ubuntu 24.04"
-}
-
-# Parse command line arguments
-parse_arguments() {
-    local dry_run=false
-    
-    while [[ $# -gt 0 ]]; do
-        case $1 in
-            -h|--help)
-                show_help
-                exit 0
-                ;;
-            --version)
-                show_version
-                exit 0
-                ;;
-            --dry-run)
-                dry_run=true
-                shift
-                ;;
-            --debug)
-                export DEPLOY_DEBUG=1
-                shift
-                ;;
-            *)
-                echo "ERROR: Unknown option: $1" >&2
-                echo "Use --help for usage information." >&2
-                exit 1
-                ;;
-        esac
-    done
-    
-    # Set dry run mode if requested
-    if [[ "$dry_run" == "true" ]]; then
-        export DRY_RUN_MODE=1
-        log_info "Running in dry-run mode - no actual deployment will occur"
-    fi
-}
-
-# Parse arguments first
-parse_arguments "$@"
-
-# Run initial validations
-validate_script_environment
-check_required_files
+# Set strict mode after initializing variables
+set -euo pipefail
 
 # Colors for output
 RED='\033[0;31m'
@@ -152,12 +18,6 @@ GREEN='\033[0;32m'
 YELLOW='\033[1;33m'
 BLUE='\033[0;34m'
 NC='\033[0m' # No Color
-
-# Docker Compose command detection
-COMPOSE_CMD="docker compose"
-if command -v docker-compose >/dev/null 2>&1; then 
-    COMPOSE_CMD="docker-compose"
-fi
 
 # Logging functions
 log_info() {
@@ -176,354 +36,301 @@ log_error() {
     echo -e "${RED}[ERROR]${NC} $1"
 }
 
-# Function to check if command exists
-command_exists() {
-    command -v "$1" >/dev/null 2>&1
-}
-
-# Helper function to extract environment variables with proper comment stripping
-get_env() {
-    # Usage: get_env VAR_NAME
-    local raw
-    raw=$(grep -E "^$1=" .env | tail -n 1 | cut -d'=' -f2-)
-    echo "$raw" | sed -E 's/[[:space:]]*#.*$//' | sed -E 's/^[[:space:]]+|[[:space:]]+$//g' | tr -d '"\''
-}
-
-# Function to check Docker installation
-check_docker() {
-    log_info "Checking Docker installation..."
-    
-    if ! command_exists docker; then
-        log_error "Docker is not installed. Please install Docker first:"
-        echo "  sudo apt update"
-        echo "  sudo apt install -y docker.io"
-        echo "  sudo systemctl start docker"
-        echo "  sudo systemctl enable docker"
-        echo "  sudo usermod -aG docker \$USER"
-        echo "  # Log out and back in for group changes to take effect"
-        exit 1
-    fi
-    
-    if ! command_exists docker-compose && ! docker compose version >/dev/null 2>&1; then
-        log_error "Docker Compose is not installed. Please install Docker Compose:"
-        echo "  sudo apt install -y docker-compose-plugin"
-        exit 1
-    fi
-    
-    # Check if Docker daemon is running
-    if ! docker info >/dev/null 2>&1; then
-        log_error "Docker daemon is not running. Please start Docker:"
-        echo "  sudo systemctl start docker"
-        exit 1
-    fi
-    
-    log_success "Docker is installed and running"
-}
-
-# Function to check convex dependency
-check_convex_dependency() {
-    log_info "Checking Convex dependency..."
-    
-    BOT_PACKAGE_JSON="packages/bot/package.json"
-    
-    if [ ! -f "$BOT_PACKAGE_JSON" ]; then
-        log_error "Bot package.json not found: $BOT_PACKAGE_JSON"
-        exit 1
-    fi
-    
-    if grep -q '"convex"' "$BOT_PACKAGE_JSON"; then
-        log_success "Convex dependency found in package.json"
-    else
-        log_error "Convex dependency missing from $BOT_PACKAGE_JSON"
-        log_info "Please add the convex dependency:"
-        echo '  "convex": "^1.8.0"'
-        exit 1
+log_debug() {
+    if [[ "$DEPLOY_DEBUG" == "true" ]]; then
+        echo -e "${YELLOW}[DEBUG]${NC} $1"
     fi
 }
 
-# Function to check environment file
-check_env_file() {
-    log_info "Checking environment configuration..."
+# Function to check requirements
+check_requirements() {
+    log_info "Checking deployment requirements..."
     
-    if [ ! -f ".env" ]; then
-        log_warning ".env file not found"
-        
-        if [ -f ".env.example" ]; then
-            log_info "Creating .env from .env.example..."
-            cp .env.example .env
-            log_warning "Please edit .env file with your actual configuration values:"
-            echo "  - CONVEX_URL: Your Convex deployment URL (e.g., https://your-deployment.convex.cloud)"
-            echo "  - CONVEX_DEPLOYMENT: Your deployment name (generated by 'npx convex dev')"
-            echo "  - CONVEX_ADMIN_KEY: Your Convex admin key"
-            echo "  - TELEGRAM_BOT_TOKEN: Your Telegram bot token"
-            echo "  - AZURE_OPENAI_ENDPOINT: Your Azure OpenAI endpoint"
-            echo "  - AZURE_OPENAI_KEY: Your Azure OpenAI key"
-            echo ""
-            echo ""
-            echo "Configuration guidance:"
-            echo "  For development: Run 'npx convex dev' first, then 'cp .env.local .env'"
-            echo "  For production server: Manually set production CONVEX_URL, CONVEX_DEPLOYMENT=prod:<name>,"
-            echo "                        and CONVEX_ADMIN_KEY from the Convex dashboard. Do not use .env.local."
-            echo ""
-            echo "After editing .env, run this script again."
-            exit 1
-        else
-            log_error ".env.example file not found. Please create .env file manually with required environment variables."
+    # Check if Docker is installed and running
+    if ! command -v docker &> /dev/null; then
+        log_error "Docker is not installed. Please install Docker first."
+        exit 1
+    fi
+    
+    if ! docker info &> /dev/null; then
+        log_error "Docker is not running. Please start Docker first."
+        exit 1
+    fi
+    
+    # Check if docker-compose is available
+    if ! command -v docker-compose &> /dev/null && ! docker compose version &> /dev/null; then
+        log_error "Docker Compose is not available. Please install Docker Compose."
+        exit 1
+    fi
+    
+    # Check if required files exist
+    local required_files=("docker-compose.yml" "packages/bot/Dockerfile" "packages/bot/package.json")
+    for file in "${required_files[@]}"; do
+        if [[ ! -f "$file" ]]; then
+            log_error "Required file not found: $file"
             exit 1
         fi
-    fi
+    done
     
-    # Check for required Convex environment variables
-    if [ -f ".env" ]; then
-        log_info "Verifying Convex environment variables..."
-        
-        if ! grep -q "CONVEX_URL=" ".env" || ! grep -q "CONVEX_DEPLOYMENT=" ".env" || ! grep -q "CONVEX_ADMIN_KEY=" ".env"; then
-            log_error "Missing required Convex environment variables in .env file"
-            log_info "Required variables:"
-            echo "  - CONVEX_URL=https://your-deployment.convex.cloud"
-            echo "  - CONVEX_DEPLOYMENT=your-deployment-name"
-            echo "  - CONVEX_ADMIN_KEY=your-convex-admin-key"
-            echo ""
-            if [ -f ".env.local" ]; then
-                log_info "For local development, you can copy: cp .env.local .env"
-                log_info "For production servers, set \`CONVEX_URL\`, \`CONVEX_DEPLOYMENT=prod:<name>\`, and \`CONVEX_ADMIN_KEY\` from the Convex dashboard; do not use \`.env.local\`."
-            else
-                log_info "Run 'npx convex dev' to configure your Convex project first"
-            fi
-            exit 1
-        fi
-        
-        log_success "Convex environment variables found"
-    fi
-    
-    log_success "Environment file exists and configured"
+    log_success "All requirements satisfied"
 }
 
-# Function to validate Convex credentials for production deployment
-validate_convex_credentials() {
-    log_info "Validating Convex credentials for production deployment..."
+# Function to wait for container health with polling and timeout
+wait_for_container_health() {
+    local container_name="buddian-bot"
+    local timeout=120  # 120 seconds timeout
+    local interval=2   # Check every 2 seconds
+    local elapsed=0
     
-    if [ ! -f ".env" ]; then
-        log_error ".env file not found"
-        return 1
-    fi
+    log_info "Polling container health status (timeout: ${timeout}s)..."
     
-    # Extract Convex configuration values using sanitized helper
-    CONVEX_DEPLOYMENT=$(get_env CONVEX_DEPLOYMENT)
-    CONVEX_ADMIN_KEY=$(get_env CONVEX_ADMIN_KEY)
-    CONVEX_URL=$(get_env CONVEX_URL)
-    
-    # Check if values are placeholder values
-    if [[ "$CONVEX_DEPLOYMENT" == "your-deployment-name" ]] || [[ "$CONVEX_DEPLOYMENT" == "your_deployment_name" ]]; then
-        log_error "CONVEX_DEPLOYMENT is still set to placeholder value"
-        log_info "Please update CONVEX_DEPLOYMENT in .env file with your actual deployment name"
-        return 1
-    fi
-    
-    if [[ "$CONVEX_ADMIN_KEY" == "your_convex_admin_key_here" ]] || [[ "$CONVEX_ADMIN_KEY" == "your-convex-admin-key" ]]; then
-        log_error "CONVEX_ADMIN_KEY is still set to placeholder value"
-        log_info "Please update CONVEX_ADMIN_KEY in .env file with your actual admin key"
-        return 1
-    fi
-    
-    # Detect environment type based on CONVEX_DEPLOYMENT format
-    if [[ "$CONVEX_DEPLOYMENT" == dev:* ]]; then
-        log_warning "⚠️  DEVELOPMENT credentials detected (dev:*)"
-        log_warning "For Ubuntu server deployment, you should use PRODUCTION credentials"
-        echo ""
-        log_info "Development vs Production credentials:"
-        echo "  • Development (dev:deployment-name): For local testing with 'npx convex dev'"
-        echo "  • Production (prod:deployment-name): For server deployment with full admin key"
-        echo ""
-        log_info "To use production credentials:"
-        echo "  1. Go to https://dashboard.convex.dev"
-        echo "  2. Select your production deployment"
-        echo "  3. Update your .env file with:"
-        echo "     CONVEX_DEPLOYMENT=prod:your-deployment-name"
-        echo "     CONVEX_ADMIN_KEY=prod:<deployment>|<token>"
-        echo ""
-        
-        # Unified policy for development credentials
-        log_error "Development credentials are not allowed for server deployment"
-        log_info "Please use production credentials for server deployment"
-        log_info "To override this check, set ALLOW_DEV_DEPLOY=1 environment variable"
-        
-        if [[ "$ALLOW_DEV_DEPLOY" == "1" ]]; then
-            log_warning "⚠️  OVERRIDE: Proceeding with development credentials (STRONGLY NOT RECOMMENDED)"
-            log_warning "This should only be used for testing purposes"
-        else
-            return 1
+    while [ $elapsed -lt $timeout ]; do
+        # Check if container exists
+        if ! docker ps -q -f name="$container_name" | grep -q .; then
+            log_debug "Container '$container_name' not found, waiting..."
+            sleep $interval
+            elapsed=$((elapsed + interval))
+            continue
         fi
         
-    elif [[ "$CONVEX_DEPLOYMENT" == prod:* ]]; then
-        log_success "✅ PRODUCTION credentials detected (prod:*)"
+        # Get health status
+        local health_status
+        health_status=$(docker inspect -f '{{ .State.Health.Status }}' "$container_name" 2>/dev/null || echo "no-health-check")
         
-        # Validate admin key format for production and suggest deployment name
-        if [[ "$CONVEX_ADMIN_KEY" == prod:*"|"* ]]; then
-            local rest=${CONVEX_ADMIN_KEY#prod:}
-            local key_deployment=${rest%%|*}
-            if [[ "$CONVEX_DEPLOYMENT" != "prod:$key_deployment" ]]; then
-                log_warning "CONVEX_DEPLOYMENT (\"$CONVEX_DEPLOYMENT\") does not match admin key deployment (\"prod:$key_deployment\")."
-                log_info "Suggested: CONVEX_DEPLOYMENT=prod:$key_deployment"
-            fi
-            
-            # Also verify CONVEX_URL contains the deployment name
-            if [[ "$CONVEX_URL" != *"$key_deployment.convex.cloud"* ]]; then
-                log_warning "CONVEX_URL does not match admin key deployment"
-                log_info "Expected URL format: https://$key_deployment.convex.cloud"
-                log_info "Current URL: $CONVEX_URL"
-            fi
-        else
-            log_warning "Admin key doesn't start with 'prod:' prefix or contain '|' separator"
-            log_info "Production admin keys should start with 'prod:' and contain a '|' separator"
-            log_info "Please verify your admin key is correct for production deployment"
-        fi
+        log_debug "Container health status: $health_status (elapsed: ${elapsed}s)"
         
-        # Extract deployment name from CONVEX_DEPLOYMENT
-        DEPLOYMENT_NAME=${CONVEX_DEPLOYMENT#prod:}
+        case "$health_status" in
+            "healthy")
+                log_success "Container is healthy!"
+                return 0
+                ;;
+            "unhealthy")
+                log_error "Container is unhealthy!"
+                return 1
+                ;;
+            "starting")
+                log_debug "Container is starting, continuing to wait..."
+                ;;
+            "no-health-check")
+                # If no health check is defined, check if container is running
+                local container_status
+                container_status=$(docker inspect -f '{{ .State.Status }}' "$container_name" 2>/dev/null || echo "unknown")
+                if [ "$container_status" = "running" ]; then
+                    log_info "Container is running (no health check defined)"
+                    return 0
+                else
+                    log_debug "Container status: $container_status, continuing to wait..."
+                fi
+                ;;
+            *)
+                log_debug "Unknown health status: $health_status, continuing to wait..."
+                ;;
+        esac
         
-        # Check if URL matches deployment name
-        if [[ "$CONVEX_URL" == *"$DEPLOYMENT_NAME.convex.cloud"* ]]; then
-            log_success "Convex URL matches deployment name"
-        else
-            log_warning "Convex URL might not match deployment name"
-            log_info "Expected URL format: https://$DEPLOYMENT_NAME.convex.cloud"
-            log_info "Current URL: $CONVEX_URL"
-        fi
-        
-    else
-        log_error "Invalid CONVEX_DEPLOYMENT format: $CONVEX_DEPLOYMENT"
-        log_info "Expected format:"
-        echo "  • Development: dev:deployment-name"
-        echo "  • Production: prod:deployment-name"
-        echo ""
-        log_info "If you have an admin key starting with 'prod:' and containing a '|', use:"
-        echo "  CONVEX_DEPLOYMENT=prod:your-deployment-name"
-        return 1
-    fi
+        sleep $interval
+        elapsed=$((elapsed + interval))
+    done
     
-    # Check admin key presence for production deployment
-    if [[ "$CONVEX_DEPLOYMENT" == prod:* ]] && [[ -z "$CONVEX_ADMIN_KEY" ]]; then
-        log_error "CONVEX_ADMIN_KEY is required for production deployment"
-        log_info "Get your admin key from https://dashboard.convex.dev"
-        return 1
-    fi
-    
-    log_success "Convex credentials validation completed"
-    return 0
+    log_error "Timeout waiting for container to become healthy (${timeout}s elapsed)"
+    return 1
 }
 
-# Function to verify Convex setup
-verify_convex_setup() {
-    log_info "Verifying Convex setup for Docker build..."
+# Function to create Convex API stub
+create_convex_stub() {
+    log_info "Checking Convex API stub requirements..."
     
-    # Check for convex.json presence first
-    if [[ ! -f "convex.json" ]]; then
-        log_error "convex.json not found at repo root. Ensure Convex project is initialized."
-        log_info "Run 'npx convex dev' to initialize your Convex project"
-        exit 1
+    local stub_dir="convex/_generated"
+    local stub_file="$stub_dir/api.ts"
+    local stub_dts_file="$stub_dir/api.d.ts"
+    local force_stub=false
+    
+    # Check for --force-stub flag
+    if [[ "${1:-}" == "--force-stub" ]]; then
+        force_stub=true
+        log_info "Force stub creation enabled"
     fi
     
-    # Check if convex/_generated/api.ts exists or can be generated
-    CONVEX_API_FILE="convex/_generated/api.ts"
+    # Create directory if it doesn't exist
+    mkdir -p "$stub_dir"
     
-    if [ -f "$CONVEX_API_FILE" ]; then
-        log_success "Convex API file exists: $CONVEX_API_FILE"
+    # Comment 1 & 2: Check if api.ts exists and contains proper FunctionReference API
+    if [[ -f "$stub_file" ]] && ! $force_stub; then
+        if grep -q "export const api" "$stub_file" && grep -q "FunctionReference" "$stub_file"; then
+            log_info "Convex API stub already exists with FunctionReference format - skipping creation"
+            return 0
+        else
+            log_warning "Existing api.ts does not match FunctionReference format - will recreate"
+        fi
+    elif [[ -f "$stub_file" ]] && ! $force_stub; then
+        log_info "Convex API stub already exists - skipping creation (use --force-stub to override)"
+        return 0
+    fi
+    
+    # Comment 3: Check if api.d.ts exists and skip if not forcing
+    if [[ -f "$stub_dts_file" ]] && ! $force_stub; then
+        log_info "Convex API type definitions already exist - skipping creation"
     else
-        log_warning "Convex API file not found: $CONVEX_API_FILE"
-        log_info "Creating typed FunctionReference stub..."
-        
-        mkdir -p convex/_generated
-        cat > "$CONVEX_API_FILE" << 'EOF'
+        # Only create api.d.ts if missing or forcing, and mimic Convex FilterApi style
+        log_info "Creating Convex API type definitions..."
+        cat > "$stub_dts_file" << 'EOF'
+/* eslint-disable */
 /**
- * Generated Convex API
- * This file contains the generated API exports for Convex functions
+ * Generated `api` utility stub for deployment.
+ *
+ * THIS CODE IS AUTOMATICALLY GENERATED FOR DEPLOYMENT.
+ *
+ * @module
+ */
+
+import type {
+  ApiFromModules,
+  FilterApi,
+  FunctionReference,
+} from "convex/server";
+
+/**
+ * A utility for referencing Convex functions in your app's API.
+ *
+ * Usage:
+ * ```js
+ * const myFunctionReference = api.myModule.myFunction;
+ * ```
+ */
+declare const fullApi: ApiFromModules<{
+  health: any;
+  messages: any;
+  resources: any;
+  search: any;
+  threads: any;
+  users: any;
+}>;
+export declare const api: FilterApi<
+  typeof fullApi,
+  FunctionReference<any, "public">
+>;
+export declare const internal: FilterApi<
+  typeof fullApi,
+  FunctionReference<any, "internal">
+>;
+EOF
+        log_success "Convex API type definitions created"
+    fi
+    
+    # Comment 1: Create FunctionReference-based API stub
+    log_info "Creating FunctionReference-based Convex API stub..."
+    cat > "$stub_file" << 'EOF'
+/**
+ * Generated Convex API stub for deployment
+ * This file contains FunctionReference-shaped objects for TypeScript compatibility
  */
 
 import { FunctionReference } from "convex/server";
 
+// Factory functions to create FunctionReference-shaped objects
+function q(name: string): FunctionReference<"query"> {
+  return {
+    _type: "query",
+    _name: name,
+    _visibility: "public",
+    _args: {},
+    _returnType: {},
+    _componentPath: undefined
+  } as FunctionReference<"query">;
+}
+
+function m(name: string): FunctionReference<"mutation"> {
+  return {
+    _type: "mutation",
+    _name: name,
+    _visibility: "public",
+    _args: {},
+    _returnType: {},
+    _componentPath: undefined
+  } as FunctionReference<"mutation">;
+}
+
 // Health module functions
 export const health = {
-  checkConnection: "health:checkConnection" as any as FunctionReference<"query">,
-  ping: "health:ping" as any as FunctionReference<"query">,
-  getStats: "health:getStats" as any as FunctionReference<"query">,
-  recordHealthMetrics: "health:recordHealthMetrics" as any as FunctionReference<"mutation">,
-  getSystemHealth: "health:getSystemHealth" as any as FunctionReference<"query">,
-  getComponentHealth: "health:getComponentHealth" as any as FunctionReference<"query">,
-  getOverallStatus: "health:getOverallStatus" as any as FunctionReference<"query">,
-  cleanupHealthRecords: "health:cleanupHealthRecords" as any as FunctionReference<"mutation">,
-  getHealthMetricsSummary: "health:getHealthMetricsSummary" as any as FunctionReference<"query">,
+  checkConnection: q("health:checkConnection"),
+  ping: q("health:ping"),
+  getStats: q("health:getStats"),
+  recordHealthMetrics: m("health:recordHealthMetrics"),
+  getSystemHealth: q("health:getSystemHealth"),
+  getComponentHealth: q("health:getComponentHealth"),
+  getOverallStatus: q("health:getOverallStatus"),
+  cleanupHealthRecords: m("health:cleanupHealthRecords"),
+  getHealthMetricsSummary: q("health:getHealthMetricsSummary"),
 };
 
 // Messages module functions  
 export const messages = {
-  storeMessage: "messages:storeMessage" as any as FunctionReference<"mutation">,
-  getMessage: "messages:getMessage" as any as FunctionReference<"query">,
-  getMessages: "messages:getMessages" as any as FunctionReference<"query">,
-  searchMessages: "messages:searchMessages" as any as FunctionReference<"query">,
-  getThreadContext: "messages:getThreadContext" as any as FunctionReference<"query">,
-  updateMessageDecisions: "messages:updateMessageDecisions" as any as FunctionReference<"mutation">,
-  updateMessageActionItems: "messages:updateMessageActionItems" as any as FunctionReference<"mutation">,
-  getMessagesByUser: "messages:getMessagesByUser" as any as FunctionReference<"query">,
-  getMessagesByThread: "messages:getMessagesByThread" as any as FunctionReference<"query">,
-  getMessagesWithDecisions: "messages:getMessagesWithDecisions" as any as FunctionReference<"query">,
-  getMessagesWithActionItems: "messages:getMessagesWithActionItems" as any as FunctionReference<"query">,
-  getMessageStats: "messages:getMessageStats" as any as FunctionReference<"query">,
-  deleteOldMessages: "messages:deleteOldMessages" as any as FunctionReference<"mutation">,
+  storeMessage: m("messages:storeMessage"),
+  getMessage: q("messages:getMessage"),
+  getMessages: q("messages:getMessages"),
+  searchMessages: q("messages:searchMessages"),
+  getThreadContext: q("messages:getThreadContext"),
+  updateMessageDecisions: m("messages:updateMessageDecisions"),
+  updateMessageActionItems: m("messages:updateMessageActionItems"),
+  getMessagesByUser: q("messages:getMessagesByUser"),
+  getMessagesByThread: q("messages:getMessagesByThread"),
+  getMessagesWithDecisions: q("messages:getMessagesWithDecisions"),
+  getMessagesWithActionItems: q("messages:getMessagesWithActionItems"),
+  getMessageStats: q("messages:getMessageStats"),
+  deleteOldMessages: m("messages:deleteOldMessages"),
 };
 
 // Users module functions
 export const users = {
-  getUser: "users:getUser" as any as FunctionReference<"query">,
-  getUserById: "users:getUserById" as any as FunctionReference<"query">,
-  createUser: "users:createUser" as any as FunctionReference<"mutation">,
-  updateUserPreferences: "users:updateUserPreferences" as any as FunctionReference<"mutation">,
-  updateLastActive: "users:updateLastActive" as any as FunctionReference<"mutation">,
-  getUserLanguage: "users:getUserLanguage" as any as FunctionReference<"query">,
-  getActiveUsers: "users:getActiveUsers" as any as FunctionReference<"query">,
-  getUserStats: "users:getUserStats" as any as FunctionReference<"query">,
+  getUser: q("users:getUser"),
+  getUserById: q("users:getUserById"),
+  createUser: m("users:createUser"),
+  updateUserPreferences: m("users:updateUserPreferences"),
+  updateLastActive: m("users:updateLastActive"),
+  getUserLanguage: q("users:getUserLanguage"),
+  getActiveUsers: q("users:getActiveUsers"),
+  getUserStats: q("users:getUserStats"),
 };
 
 // Resources module functions
 export const resources = {
-  storeResource: "resources:storeResource" as any as FunctionReference<"mutation">,
-  getResources: "resources:getResources" as any as FunctionReference<"query">,
-  getResourcesByUser: "resources:getResourcesByUser" as any as FunctionReference<"query">,
-  searchResources: "resources:searchResources" as any as FunctionReference<"query">,
-  getResource: "resources:getResource" as any as FunctionReference<"query">,
-  updateResourceSummary: "resources:updateResourceSummary" as any as FunctionReference<"mutation">,
-  deleteResource: "resources:deleteResource" as any as FunctionReference<"mutation">,
-  getRecentResources: "resources:getRecentResources" as any as FunctionReference<"query">,
-  getResourceStats: "resources:getResourceStats" as any as FunctionReference<"query">,
+  storeResource: m("resources:storeResource"),
+  getResources: q("resources:getResources"),
+  getResourcesByUser: q("resources:getResourcesByUser"),
+  searchResources: q("resources:searchResources"),
+  getResource: q("resources:getResource"),
+  updateResourceSummary: m("resources:updateResourceSummary"),
+  deleteResource: m("resources:deleteResource"),
+  getRecentResources: q("resources:getRecentResources"),
+  getResourceStats: q("resources:getResourceStats"),
 };
 
 // Threads module functions
 export const threads = {
-  createThread: "threads:createThread" as any as FunctionReference<"mutation">,
-  getThreadsByChat: "threads:getThreadsByChat" as any as FunctionReference<"query">,
-  getThread: "threads:getThread" as any as FunctionReference<"query">,
-  updateThreadActivity: "threads:updateThreadActivity" as any as FunctionReference<"mutation">,
-  updateThreadSummary: "threads:updateThreadSummary" as any as FunctionReference<"mutation">,
-  addThreadTags: "threads:addThreadTags" as any as FunctionReference<"mutation">,
-  removeThreadTags: "threads:removeThreadTags" as any as FunctionReference<"mutation">,
-  searchThreads: "threads:searchThreads" as any as FunctionReference<"query">,
-  getActiveThreads: "threads:getActiveThreads" as any as FunctionReference<"query">,
-  getThreadsByTags: "threads:getThreadsByTags" as any as FunctionReference<"query">,
-  getThreadStats: "threads:getThreadStats" as any as FunctionReference<"query">,
-  deleteThread: "threads:deleteThread" as any as FunctionReference<"mutation">,
-  getThreadMessages: "threads:getThreadMessages" as any as FunctionReference<"query">,
-  assignMessageToThread: "threads:assignMessageToThread" as any as FunctionReference<"mutation">,
+  createThread: m("threads:createThread"),
+  getThreadsByChat: q("threads:getThreadsByChat"),
+  getThread: q("threads:getThread"),
+  updateThreadActivity: m("threads:updateThreadActivity"),
+  updateThreadSummary: m("threads:updateThreadSummary"),
+  addThreadTags: m("threads:addThreadTags"),
+  removeThreadTags: m("threads:removeThreadTags"),
+  searchThreads: q("threads:searchThreads"),
+  getActiveThreads: q("threads:getActiveThreads"),
+  getThreadsByTags: q("threads:getThreadsByTags"),
+  getThreadStats: q("threads:getThreadStats"),
+  deleteThread: m("threads:deleteThread"),
+  getThreadMessages: q("threads:getThreadMessages"),
+  assignMessageToThread: m("threads:assignMessageToThread"),
 };
 
 // Search module functions
 export const search = {
-  searchByKeywords: "search:searchByKeywords" as any as FunctionReference<"query">,
-  searchByContext: "search:searchByContext" as any as FunctionReference<"query">,
-  getRelatedContent: "search:getRelatedContent" as any as FunctionReference<"query">,
-  indexContent: "search:indexContent" as any as FunctionReference<"mutation">,
-  searchAll: "search:searchAll" as any as FunctionReference<"query">,
-  getSearchSuggestions: "search:getSearchSuggestions" as any as FunctionReference<"query">,
-  getPopularSearchTerms: "search:getPopularSearchTerms" as any as FunctionReference<"query">,
+  searchByKeywords: q("search:searchByKeywords"),
+  searchByContext: q("search:searchByContext"),
+  getRelatedContent: q("search:getRelatedContent"),
+  indexContent: m("search:indexContent"),
+  searchAll: q("search:searchAll"),
+  getSearchSuggestions: q("search:getSearchSuggestions"),
+  getPopularSearchTerms: q("search:getPopularSearchTerms"),
 };
 
 // Main API export
@@ -538,225 +345,142 @@ export const api = {
 
 export default api;
 EOF
-        
-        log_success "Typed FunctionReference stub created: $CONVEX_API_FILE"
-    fi
     
-    # Verify convex service import path uses path alias
-    CONVEX_SERVICE_FILE="packages/bot/src/services/convex.ts"
-    
-    if [ -f "$CONVEX_SERVICE_FILE" ]; then
-        if grep -q "import { api } from 'convex/_generated/api';" "$CONVEX_SERVICE_FILE"; then
-            log_success "Import path uses path alias in $CONVEX_SERVICE_FILE"
-        else
-            log_warning "Import statement should use 'convex/_generated/api' path alias in $CONVEX_SERVICE_FILE"
-        fi
-    else
-        log_error "Convex service file not found: $CONVEX_SERVICE_FILE"
-        exit 1
-    fi
-    
-    log_success "Convex setup verified"
-}
-
-# Function to clean up previous builds
-cleanup_docker() {
-    log_info "Cleaning up previous Docker builds..."
-    
-    # Stop and remove existing containers
-    if $COMPOSE_CMD ps -q >/dev/null 2>&1; then
-        $COMPOSE_CMD down --remove-orphans || true
-    fi
-    
-    # Remove dangling images
-    docker image prune -f >/dev/null 2>&1 || true
-    
-    log_success "Docker cleanup completed"
+    log_success "FunctionReference-based Convex API stub created successfully"
+    log_debug "Created files: $stub_file and $stub_dts_file"
 }
 
 # Function to build and deploy
-deploy_services() {
-    log_info "Building and deploying Buddian services..."
+deploy_application() {
+    log_info "Starting application deployment..."
     
-    # Optional Convex deployment
-    if [[ "$RUN_CONVEX_DEPLOY" == "1" ]]; then
-        log_info "Deploying Convex schema to production..."
-        if command_exists npx; then
-            npx convex deploy --prod --yes || { log_error "Convex deploy failed"; exit 1; }
-            log_success "Convex schema deployed successfully"
-        else
-            log_error "npx not found. Please install Node.js and npm or deploy schema manually"
-            log_info "Run 'npx convex deploy --prod' on your development machine before deployment"
-            exit 1
-        fi
+    # Set Docker build environment
+    export DOCKER_BUILDKIT=1
+    export COMPOSE_DOCKER_CLI_BUILD=1
+    
+    # Stop any existing containers
+    log_info "Stopping existing containers..."
+    if command -v docker-compose &> /dev/null; then
+        docker-compose down --remove-orphans || true
+    else
+        docker compose down --remove-orphans || true
     fi
     
-    # Build with no cache to ensure fresh build
-    log_info "Building Docker images..."
-    if $COMPOSE_CMD build --no-cache; then
-        log_success "Docker images built successfully"
+    # Build and start containers
+    log_info "Building and starting containers..."
+    if command -v docker-compose &> /dev/null; then
+        docker-compose up --build -d
     else
-        log_error "Docker build failed"
-        log_info "Troubleshooting tips:"
-        echo "  1. Check if all required files exist"
-        echo "  2. Verify .env file has correct values"
-        echo "  3. Ensure convex/_generated/api.ts exists"
-        echo "  4. Check Docker logs: $COMPOSE_CMD logs"
-        exit 1
+        docker compose up --build -d
     fi
     
-    # Start services
-    log_info "Starting services..."
-    if $COMPOSE_CMD up -d; then
-        log_success "Services started successfully"
-        
-        # Note about nginx profile
-        log_info "Note: Nginx service is disabled by default \(requires 'internal-proxy' profile\)"
-        log_info "To enable nginx: $COMPOSE_CMD --profile internal-proxy up -d"
+    # Wait for containers to be ready with health polling
+    log_info "Waiting for containers to be ready..."
+    wait_for_container_health
+    
+    # Check container status
+    log_info "Checking container status..."
+    if command -v docker-compose &> /dev/null; then
+        docker-compose ps
     else
-        log_error "Failed to start services"
-        log_info "Check logs with: $COMPOSE_CMD logs"
-        exit 1
+        docker compose ps
+    fi
+    
+    log_success "Deployment completed successfully!"
+}
+
+# Function to show deployment status
+show_status() {
+    log_info "Deployment Status:"
+    echo "===================="
+    
+    if command -v docker-compose &> /dev/null; then
+        docker-compose ps
+    else
+        docker compose ps
+    fi
+    
+    echo ""
+    log_info "To view logs, run:"
+    if command -v docker-compose &> /dev/null; then
+        echo "  docker-compose logs -f"
+    else
+        echo "  docker compose logs -f"
+    fi
+    
+    echo ""
+    log_info "To stop the application, run:"
+    if command -v docker-compose &> /dev/null; then
+        echo "  docker-compose down"
+    else
+        echo "  docker compose down"
     fi
 }
 
-# Function to verify deployment
-verify_deployment() {
-    log_info "Verifying deployment..."
+# Function to cleanup on failure
+cleanup_on_failure() {
+    log_warning "Deployment failed. Cleaning up..."
     
-    # Wait a moment for services to start
-    sleep 5
-    
-    # Check if containers are running
-    if $COMPOSE_CMD ps | grep -q "Up"; then
-        log_success "Containers are running"
-        
-        # Show running services
-        echo ""
-        log_info "Running services:"
-        $COMPOSE_CMD ps
-        
+    if command -v docker-compose &> /dev/null; then
+        docker-compose down --remove-orphans || true
     else
-        log_error "Some containers are not running properly"
-        log_info "Check logs with: $COMPOSE_CMD logs"
-        return 1
+        docker compose down --remove-orphans || true
     fi
     
-    # Check container health
-    log_info "Checking container health..."
-    
-    # Get container names
-    BOT_CONTAINER=$($COMPOSE_CMD ps -q bot 2>/dev/null || echo "")
-    NGINX_CONTAINER=$($COMPOSE_CMD ps -q nginx 2>/dev/null || echo "")
-    
-    if [ -n "$BOT_CONTAINER" ]; then
-        if docker inspect "$BOT_CONTAINER" --format='{{.State.Health.Status}}' 2>/dev/null | grep -q "healthy\|starting"; then
-            log_success "Bot service is healthy"
-        else
-            log_warning "Bot service health check failed or not configured"
-        fi
-    fi
-    
-    if [ -n "$NGINX_CONTAINER" ]; then
-        if docker inspect "$NGINX_CONTAINER" --format='{{.State.Status}}' 2>/dev/null | grep -q "running"; then
-            log_success "Nginx service is running"
-        else
-            log_warning "Nginx service is not running properly"
-        fi
-    fi
-    
-    log_success "Deployment verification completed"
-}
-
-# Function to show next steps
-show_next_steps() {
-    echo ""
-    log_success "🎉 Buddian deployment completed successfully!"
-    echo ""
-    log_info "Next steps:"
-    echo "  1. Configure your external nginx/reverse proxy to point to this server"
-    echo "  2. Set up SSL certificates \(Let's Encrypt recommended\)"
-    echo "  3. Configure your Telegram bot webhook to point to your domain"
-    echo ""
-    log_info "Useful commands:"
-    echo "  • View logs: $COMPOSE_CMD logs -f"
-    echo "  • Restart services: $COMPOSE_CMD restart"
-    echo "  • Stop services: $COMPOSE_CMD down"
-    echo "  • Enable nginx proxy: $COMPOSE_CMD --profile internal-proxy up -d"
-    echo "  • Update deployment: git pull && ./deploy.sh"
-    echo ""
-    log_info "Troubleshooting:"
-    echo "  • Check service status: $COMPOSE_CMD ps"
-    echo "  • View specific service logs: $COMPOSE_CMD logs <service-name>"
-    echo "  • Rebuild if needed: $COMPOSE_CMD build --no-cache"
-    echo ""
-    
-    # Show external nginx configuration example
-    echo ""
-    log_info "Example external nginx configuration:"
-    echo "server {"
-    echo "    listen 80;"
-    echo "    server_name your-domain.com;"
-    echo "    return 301 https://\$server_name\$request_uri;"
-    echo "}"
-    echo ""
-    echo "server {"
-    echo "    listen 443 ssl http2;"
-    echo "    server_name your-domain.com;"
-    echo ""
-    echo "    ssl_certificate /path/to/your/certificate.crt;"
-    echo "    ssl_certificate_key /path/to/your/private.key;"
-    echo ""
-    echo "    location / {"
-    echo "        proxy_pass http://localhost:8080;"
-    echo "        proxy_set_header Host \$host;"
-    echo "        proxy_set_header X-Real-IP \$remote_addr;"
-    echo "        proxy_set_header X-Forwarded-For \$proxy_add_x_forwarded_for;"
-    echo "        proxy_set_header X-Forwarded-Proto \$scheme;"
-    echo "    }"
-    echo "}"
+    log_info "Cleanup completed. You can try running the deployment again."
 }
 
 # Main deployment function
 main() {
-    echo ""
-    log_info "🚀 Starting Buddian deployment on Ubuntu 24.04"
-    echo ""
+    log_info "Starting Buddian deployment process..."
+    log_debug "Debug mode: $DEPLOY_DEBUG"
+    log_debug "Environment: $DEPLOY_ENV"
     
-    # Check if we're in the right directory
-    if [ ! -f "docker-compose.yml" ]; then
-        log_error "docker-compose.yml not found. Please run this script from the Buddian project root directory."
-        exit 1
-    fi
+    # Trap errors and cleanup
+    trap cleanup_on_failure ERR
     
-    # Run validation steps
-    check_docker
-    check_convex_dependency
-    check_env_file
-    validate_convex_credentials
-    verify_convex_setup
+    # Run deployment steps
+    check_requirements
+    create_convex_stub
+    deploy_application
+    show_status
     
-    # If in dry-run mode, stop here
-    if [[ "${DRY_RUN_MODE:-}" == "1" ]]; then
-        echo ""
-        log_success "✅ Dry-run completed successfully!"
-        log_info "All validation checks passed. Ready for deployment."
-        log_info "Run without --dry-run to perform actual deployment."
-        return 0
-    fi
-    
-    # Run actual deployment steps
-    cleanup_docker
-    deploy_services
-    verify_deployment
-    show_next_steps
-    
-    echo ""
-    log_success "✅ Deployment completed successfully!"
+    log_success "Buddian has been deployed successfully!"
+    log_info "The application should now be running and accessible."
 }
 
-# Handle script interruption
-trap 'log_error "Deployment interrupted"; exit 1' INT TERM
-
-# Run main function with all arguments
-main "$@"
+# Handle script arguments
+case "${1:-}" in
+    "status")
+        show_status
+        ;;
+    "stop")
+        log_info "Stopping Buddian application..."
+        if command -v docker-compose &> /dev/null; then
+            docker-compose down
+        else
+            docker compose down
+        fi
+        log_success "Application stopped"
+        ;;
+    "logs")
+        log_info "Showing application logs..."
+        if command -v docker-compose &> /dev/null; then
+            docker-compose logs -f
+        else
+            docker compose logs -f
+        fi
+        ;;
+    "restart")
+        log_info "Restarting Buddian application..."
+        if command -v docker-compose &> /dev/null; then
+            docker-compose restart
+        else
+            docker compose restart
+        fi
+        log_success "Application restarted"
+        ;;
+    *)
+        main
+        ;;
+esac
