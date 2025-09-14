@@ -245,3 +245,4 @@ secrets/
 # Performance monitoring
 .clinic/
 flamegraph.html
+venv

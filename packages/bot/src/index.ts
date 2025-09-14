@@ -72,7 +72,7 @@ bot.command('ping', commandHandlers.ping);
 bot.command('plugins', commandHandlers.plugins);
 
 // Generic command handler for plugin commands
-bot.hears(/^\/(\w+)(.*)/, async (ctx, next) => {
+bot.hears(/^\/(\w[-\w]*)(?:@[A-Za-z_]+)?(?:\s+(.*))?$/, async (ctx, next) => {
   const match = ctx.match;
   if (!match) return next();
   
@@ -81,7 +81,7 @@ bot.hears(/^\/(\w+)(.*)/, async (ctx, next) => {
   const args = argsString ? argsString.split(/\s+/) : [];
   
   // Check if this is a plugin command
-  if (config.plugins.enabled && pluginManager.hasCommand(commandName)) {
+  if (config.plugins.enabled && commandName && pluginManager.hasCommand(commandName)) {
     const executed = await pluginManager.executeCommand(commandName, ctx, args);
     if (executed) {
       botLogger.info('Plugin command executed', {

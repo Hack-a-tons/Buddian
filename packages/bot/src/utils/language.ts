@@ -235,7 +235,7 @@ function detectLanguageByPatterns(text: string): LanguageDetectionResult {
     };
   }
   
-  const [topLang, topScore] = sortedScores[0];
+  const [topLang, topScore] = sortedScores[0] || ['en', 0];
   const confidence = Math.min(topScore * 2, 0.9); // Cap at 0.9 for pattern detection
   
   const alternatives = sortedScores.slice(1).map((entry) => ({
