@@ -80,15 +80,117 @@ cp .env.example .env
 nano .env
 ```
 
-### 2. Configure Environment
+### 2. Convex Environment Setup
+
+Buddian uses Convex as its real-time database. The setup process differs between development and production environments:
+
+#### Development Environment Setup
+
+For local development and testing:
+
+```bash
+# Install dependencies (includes convex package)
+npm install
+
+# Initialize and configure Convex development project
+npx convex dev
+```
+
+The `npx convex dev` command will:
+- Create a new Convex development project (if needed)
+- Generate development deployment URL and credentials
+- Create `.env.local` file with your development Convex configuration
+- Start the Convex development server
+- Create database tables automatically from schema
+
+**Development credentials format:**
+- `CONVEX_URL`: `https://polished-woodpecker-620.convex.cloud` (example)
+- `CONVEX_DEPLOYMENT`: `dev:polished-woodpecker-620`
+- `CONVEX_ADMIN_KEY`: Not required for development
+
+#### Production Environment Setup
+
+For Ubuntu server deployment, you need production credentials:
+
+1. **Create Production Deployment**:
+   - Go to [Convex Dashboard](https://dashboard.convex.dev)
+   - Create a new project or select existing project
+   - Navigate to "Settings" → "Deployments"
+   - Create a production deployment
+
+2. **Get Production Credentials**:
+   - Copy the production deployment URL
+   - Generate an admin key in "Settings" → "API Keys"
+   - Note the deployment name from the dashboard
+
+**Production credentials format:**
+- `CONVEX_URL`: `https://ideal-ermine-213.convex.cloud` (example)
+- `CONVEX_DEPLOYMENT`: `prod:ideal-ermine-213`
+- `CONVEX_ADMIN_KEY`: `prod:<deployment>|<token>`
+
+#### Database Table Creation
+
+Convex automatically creates database tables from your schema during deployment:
+
+- **Development**: Tables are created when you run `npx convex dev`
+- **Production**: Tables are created when you run `npx convex deploy --prod` (or via `RUN_CONVEX_DEPLOY=1 ./deploy.sh` if the CLI is authenticated on the host)
+- **Schema**: Defined in `convex/schema.ts` with tables for messages, users, resources, threads, and search
+
+#### Credential Management
+
+**For Local Development:**
+```bash
+# After running 'npx convex dev', copy values to .env
+cp .env.local .env
+
+# Development .env example:
+CONVEX_URL=https://polished-woodpecker-620.convex.cloud
+CONVEX_DEPLOYMENT=dev:polished-woodpecker-620
+CONVEX_ADMIN_KEY=not_required_for_dev
+```
+
+**For Production Deployment:**
+```bash
+# Use production credentials in .env
+CONVEX_URL=https://ideal-ermine-213.convex.cloud
+CONVEX_DEPLOYMENT=prod:ideal-ermine-213
+CONVEX_ADMIN_KEY=prod:ideal-ermine-213|<redacted>
+```
+
+#### Environment Migration
+
+When moving from development to production:
+
+1. **Keep Development Setup**: Continue using `npx convex dev` for local development
+2. **Add Production Credentials**: Configure production credentials in your server's `.env` file
+3. **Deploy Schema**: You must manually deploy your schema to production before running the deployment script
+4. **Data Migration**: Use Convex dashboard to export/import data if needed
+
+### 3. Configure Environment
+
+After setting up your Convex environment, complete your `.env` file configuration:
+
+```bash
+# Copy Convex configuration (development or production)
+# For development: cp .env.local .env
+# For production: manually configure with production credentials
+
+# Edit .env with all required configuration
+nano .env
+```
+
+Complete your `.env` file with all required values:
 
 ```bash
 # Required: Telegram Bot Configuration
 TELEGRAM_BOT_TOKEN=your_telegram_bot_token_here
 
-# Required: Convex Database
-CONVEX_URL=https://your-convex-deployment.convex.cloud
-CONVEX_ADMIN_KEY=your_convex_admin_key_here
+# Required: Convex Database Configuration
+# IMPORTANT: Use PRODUCTION credentials for server deployment
+# See .env.example for detailed examples and guidance
+CONVEX_URL=https://your-deployment.convex.cloud
+CONVEX_DEPLOYMENT=prod:your-deployment-name  # Use 'prod:' for production
+CONVEX_ADMIN_KEY=your_production_admin_key_here
 
 # Required: Azure OpenAI
 AZURE_OPENAI_ENDPOINT=https://your-resource.openai.azure.com/
@@ -100,27 +202,53 @@ AZURE_VISION_ENDPOINT=https://your-vision-resource.cognitiveservices.azure.com/
 AZURE_VISION_KEY=your_azure_vision_key_here
 ```
 
-### 3. Development Setup
+### 4. Development Setup
 
 ```bash
-# Install dependencies
-npm install
-
-# Set up Convex
-npx convex dev
-
 # Start development server
 npm run dev
 ```
 
-### 4. Production Deployment
+### 5. Production Deployment
+
+**Important**: You must deploy your Convex schema to production before running the deployment script:
 
 ```bash
-# Build and start with Docker Compose
+# Step 1: Deploy Convex schema to production (on your dev machine)
+npx convex deploy --prod
+
+# Step 2: Then run the deployment script on the server
+./deploy.sh
+```
+
+The updated deployment script now includes comprehensive Convex setup verification:
+
+```bash
+# The deploy.sh script now automatically:
+# - Checks for convex dependency in package.json
+# - Verifies Convex environment variables are configured
+# - Ensures convex/_generated/api.ts exists or can be generated
+# - Provides guidance for copying .env.local to .env
+
+# Use the automated deployment script (after schema deployment)
+./deploy.sh
+
+# Or manually build and start with Docker Compose
 docker compose up -d --build bot
 
 # Note: On the server, do not run npm; use Docker Compose only.
 ```
+
+#### Convex Setup Troubleshooting
+
+If you encounter Docker build issues related to Convex:
+
+1. **Missing Convex Configuration**: Run `npx convex dev` to configure your project
+2. **Environment Variables**: Copy values from `.env.local` to `.env` after running `npx convex dev`
+3. **Generated API Files**: The updated `deploy.sh` script will verify these exist or can be generated
+4. **Dependency Check**: The script ensures the `convex` package is installed in `packages/bot/package.json`
+
+The deployment script provides detailed guidance and troubleshooting information for common Convex-related build issues.
 
 ## 🔧 Configuration
 
@@ -1589,6 +1717,49 @@ If you encounter issues not covered in this troubleshooting guide:
 - Telegram webhook validation
 - API key authentication for external services
 - Basic auth for admin interfaces
+
+#### Convex Admin Key Security
+
+**Important Security Notice**: This application uses Convex admin keys for database operations, which provides full administrative access to the Convex database. This approach is used for the following reasons:
+
+**Current Implementation**:
+- The bot service uses `CONVEX_ADMIN_KEY` for all database operations
+- Admin keys bypass all authentication and authorization rules
+- This provides full read/write access to all data in the Convex database
+
+**Security Implications**:
+- **High Privilege**: Admin keys have unrestricted access to all database operations
+- **No User Context**: Operations are performed as admin, not as individual users
+- **Audit Trail**: All operations appear as admin actions in Convex logs
+- **Key Exposure Risk**: If the admin key is compromised, full database access is granted
+
+**Security Measures in Place**:
+- Admin key is stored as an environment variable (`CONVEX_ADMIN_KEY`)
+- Key is not logged or exposed in application logs
+- Container environment isolates the key from the host system
+- HTTPS encryption protects key transmission to Convex servers
+
+**Recommended Security Practices**:
+1. **Rotate Keys Regularly**: Generate new admin keys periodically in Convex dashboard
+2. **Restrict Network Access**: Use firewall rules to limit outbound connections
+3. **Monitor Usage**: Review Convex dashboard logs for unusual activity
+4. **Environment Security**: Secure the `.env` file with appropriate file permissions (600)
+5. **Container Security**: Keep Docker images updated and scan for vulnerabilities
+
+**Alternative Authentication Approaches** (for future consideration):
+- **User-based Auth**: Implement Convex user authentication with proper user sessions
+- **Service Accounts**: Use dedicated service accounts with limited permissions
+- **JWT Tokens**: Implement token-based authentication with expiration
+- **Role-based Access**: Define specific roles with minimal required permissions
+
+**Migration Path**:
+To improve security, consider migrating to user-based authentication:
+1. Implement Convex user authentication system
+2. Create service-specific user accounts with limited permissions
+3. Replace admin key usage with user session tokens
+4. Implement proper authorization checks in Convex functions
+
+For production deployments, evaluate whether the current admin key approach meets your security requirements, or if implementing user-based authentication would be more appropriate for your use case.
 
 ## 🧪 Testing
 

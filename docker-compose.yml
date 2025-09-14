@@ -9,6 +9,7 @@ services:
       - NODE_ENV=production
       - TELEGRAM_BOT_TOKEN=${TELEGRAM_BOT_TOKEN}
       - CONVEX_URL=${CONVEX_URL}
+      - CONVEX_DEPLOYMENT=${CONVEX_DEPLOYMENT}
       - CONVEX_ADMIN_KEY=${CONVEX_ADMIN_KEY}
       - AZURE_OPENAI_ENDPOINT=${AZURE_OPENAI_ENDPOINT}
       - AZURE_OPENAI_KEY=${AZURE_OPENAI_KEY}
@@ -72,6 +73,7 @@ services:
     volumes:
       - ./convex:/app/convex
       - ./package.json:/app/package.json
+      - ./convex.json:/app/convex.json:ro
     networks:
       - buddian-network
     profiles:

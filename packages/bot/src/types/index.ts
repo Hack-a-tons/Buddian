@@ -207,6 +207,7 @@ export interface BotConfig {
   };
   convex: {
     url: string;
+    deployment: string;
     adminKey: string;
   };
   openai: {

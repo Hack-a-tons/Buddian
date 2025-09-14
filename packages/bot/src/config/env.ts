@@ -14,6 +14,7 @@ const envSchema = z.object({
   
   // Convex configuration
   CONVEX_URL: z.string().url('Invalid Convex URL'),
+  CONVEX_DEPLOYMENT: z.string().min(1, 'Convex deployment is required'),
   CONVEX_ADMIN_KEY: z.string().min(1, 'Convex admin key is required'),
   
   // Azure OpenAI configuration
@@ -82,6 +83,7 @@ export const config: BotConfig = {
   },
   convex: {
     url: env.CONVEX_URL,
+    deployment: env.CONVEX_DEPLOYMENT,
     adminKey: env.CONVEX_ADMIN_KEY,
   },
   openai: {
