@@ -117,12 +117,9 @@ npm run dev
 
 ```bash
 # Build and start with Docker Compose
-npm run docker:build
-npm run docker:up
+docker compose up -d --build bot
 
-# Or manually
-npm run build
-npm start
+# Note: On the server, do not run npm; use Docker Compose only.
 ```
 
 ## 🔧 Configuration
@@ -404,8 +401,13 @@ NODE_ENV=production
 # Logging level for production
 LOG_LEVEL=info
 
-# Bot webhook URL (will be configured by nginx-host)
-WEBHOOK_URL=https://app.buddian.com/webhook
+# Bot webhook base URL (the app builds the full webhook URL as <BASE_URL>/webhook/telegram)
+TELEGRAM_WEBHOOK_BASE_URL=https://app.buddian.com
+
+# IMPORTANT: Telegram webhook secret for security (highly recommended for production)
+# Generate a random string (32+ characters). If you intentionally leave this unset,
+# remove it from .env and do not pass secret_token in webhook setup.
+TELEGRAM_WEBHOOK_SECRET=your_webhook_secret_here
 
 # ===========================================
 # SECURITY CONFIGURATION
@@ -511,7 +513,7 @@ server {
     }
 
     # Telegram webhook endpoint (stricter rate limiting)
-    location /webhook {
+    location /webhook/telegram {
         limit_req zone=webhook burst=10 nodelay;
         
         proxy_pass http://buddian_bot;
@@ -558,7 +560,8 @@ server {
         proxy_set_header X-Real-IP $remote_addr;
         proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
         proxy_set_header X-Forwarded-Proto $scheme;
-        proxy_ssl_verify off;
+        proxy_ssl_server_name on;
+        proxy_ssl_name dashboard.convex.dev;
     }
 }
 
@@ -612,7 +615,10 @@ sudo systemctl reload nginx
 cd /opt/buddian
 
 # Build and start services (production mode)
-docker compose up -d
+docker compose up -d bot
+
+# Note: The nginx compose service is for internal use only and should be started with:
+# docker compose --profile internal-proxy up -d nginx
 
 # Verify services are running
 docker compose ps
@@ -625,10 +631,10 @@ docker compose logs -f bot
 
 ```bash
 # Deploy Convex schema and functions
-docker compose exec bot npx convex deploy --prod
+docker compose run --rm convex-dev sh -c "convex deploy --prod"
 
 # Verify Convex deployment
-docker compose exec bot npx convex dashboard
+docker compose run --rm convex-dev sh -c "convex dashboard"
 ```
 
 ### Post-Deployment Verification
@@ -652,7 +658,7 @@ docker compose logs --tail=50 -f
 # Set webhook URL (replace with your bot token)
 curl -X POST "https://api.telegram.org/bot<YOUR_BOT_TOKEN>/setWebhook" \
      -H "Content-Type: application/json" \
-     -d '{"url": "https://app.buddian.com/webhook"}'
+     -d '{"url": "https://app.buddian.com/webhook/telegram", "secret_token": "<YOUR_WEBHOOK_SECRET>"}'
 
 # Verify webhook
 curl "https://api.telegram.org/bot<YOUR_BOT_TOKEN>/getWebhookInfo"
@@ -717,7 +723,7 @@ docker compose build --no-cache
 docker compose up -d
 
 # Deploy updated Convex functions
-docker compose exec bot npx convex deploy --prod
+docker compose run --rm convex-dev sh -c "convex deploy --prod"
 
 # Verify deployment
 docker compose logs -f bot
