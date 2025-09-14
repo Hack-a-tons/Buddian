@@ -555,7 +555,18 @@ async function handleQuestionOrCommand(
     );
     
     if (answer && answer.length > 10) {
-      await ctx.reply(answer);
+      // Import formatting utilities
+      const { formatSafeMarkdown, splitMessage } = await import('@/utils/formatting');
+      
+      // Format the answer safely
+      const formattedAnswer = formatSafeMarkdown(answer, { maxLength: 3000 });
+      
+      // Use splitMessage to handle long responses
+      const messageChunks = splitMessage(formattedAnswer);
+      
+      for (const chunk of messageChunks) {
+        await ctx.reply(chunk, { parse_mode: 'MarkdownV2' });
+      }
       
       logUserAction(telegramLogger, userId, chatId, 'question_answered', {
         question: content.substring(0, 100),

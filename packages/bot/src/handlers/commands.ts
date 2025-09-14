@@ -54,38 +54,52 @@ Use /help to see what I can do for you.`;
 
 // Help command handler
 export async function handleHelp(ctx: BotContext): Promise<void> {
-  const helpMessage = `🤖 **Buddian Commands & Features**
-
-**📋 Commands:**
-/start - Get started with Buddian
-/help - Show this help message
-/search <query> - Search your conversation history
-/summary - Get a summary of recent conversations
-/translate <text> - Translate text to your preferred language
-/remind - Show pending action items
-/settings - Manage your preferences
-
-**🔧 Features:**
-• **Smart Memory**: I automatically remember important decisions and action items from your conversations
-• **Document Analysis**: Share PDFs, images, or documents and I'll extract and summarize the content
-• **Web Content**: Send me URLs and I'll analyze the content for you
-• **Question Answering**: Ask me questions about our previous conversations or shared content
-• **Multilingual Support**: I can detect languages and translate content
-• **Search**: Find specific information from your conversation history
-
-**💡 Tips:**
-• Just chat naturally - I'll learn from our conversations
-• Share documents or links for analysis
-• Ask questions about previous conversations
-• Use specific keywords when searching
-
-**🌍 Supported Languages:**
-I support 60+ languages including English, Spanish, French, German, Chinese, Japanese, Arabic, and many more!
-
-Need help with something specific? Just ask me!`;
+  let helpMessage = '🤖 **Buddian Commands & Features**\n\n';
+  
+  helpMessage += '**📋 Commands:**\n';
+  const commands = [
+    '/start \\- Get started with Buddian',
+    '/help \\- Show this help message',
+    '/search <query> \\- Search your conversation history',
+    '/summary \\- Get a summary of recent conversations',
+    '/translate <text> \\- Translate text to your preferred language',
+    '/remind \\- Show pending action items',
+    '/settings \\- Manage your preferences'
+  ];
+  helpMessage += formatList(commands, { numbered: false }) + '\n\n';
+  
+  helpMessage += '**🔧 Features:**\n';
+  const features = [
+    '**Smart Memory**: I automatically remember important decisions and action items from your conversations',
+    '**Document Analysis**: Share PDFs, images, or documents and I\'ll extract and summarize the content',
+    '**Web Content**: Send me URLs and I\'ll analyze the content for you',
+    '**Question Answering**: Ask me questions about our previous conversations or shared content',
+    '**Multilingual Support**: I can detect languages and translate content',
+    '**Search**: Find specific information from your conversation history'
+  ];
+  helpMessage += formatList(features, { numbered: false }) + '\n\n';
+  
+  helpMessage += '**💡 Tips:**\n';
+  const tips = [
+    'Just chat naturally \\- I\'ll learn from our conversations',
+    'Share documents or links for analysis',
+    'Ask questions about previous conversations',
+    'Use specific keywords when searching'
+  ];
+  helpMessage += formatList(tips, { numbered: false }) + '\n\n';
+  
+  helpMessage += '**🌍 Supported Languages:**\n';
+  helpMessage += formatSafeMarkdown('I support 60+ languages including English, Spanish, French, German, Chinese, Japanese, Arabic, and many more!') + '\n\n';
+  
+  helpMessage += formatSafeMarkdown('Need help with something specific? Just ask me!');
 
   try {
-    await ctx.reply(helpMessage, { parse_mode: 'Markdown' });
+    // Use splitMessage to handle long responses
+    const messageChunks = splitMessage(helpMessage);
+    
+    for (const chunk of messageChunks) {
+      await ctx.reply(chunk, { parse_mode: 'MarkdownV2' });
+    }
     
     logUserAction(telegramLogger, ctx.from?.id.toString() || 'unknown', ctx.chat?.id.toString() || 'unknown', 'help_command');
     
@@ -96,8 +110,9 @@ Need help with something specific? Just ask me!`;
       chatId: ctx.chat?.id.toString()
     });
     
-    // Fallback without markdown
-    await ctx.reply(helpMessage.replace(/\*\*/g, ''));
+    // Fallback without markdown - use formatSafeMarkdown to clean up
+    const fallbackMessage = formatSafeMarkdown(helpMessage.replace(/\*\*/g, '').replace(/\\/g, ''));
+    await ctx.reply(fallbackMessage);
   }
 }
 
@@ -279,7 +294,8 @@ export async function handleTranslate(ctx: BotContext): Promise<void> {
     const sourceLanguage = languageResult.language;
     
     if (sourceLanguage === userLanguage) {
-      await ctx.reply(`The text appears to already be in ${languageUtils.getLanguageName(userLanguage)}. No translation needed!`);
+      const noTranslationMessage = formatSafeMarkdown(`The text appears to already be in ${languageUtils.getLanguageName(userLanguage)}. No translation needed!`);
+      await ctx.reply(noTranslationMessage, { parse_mode: 'MarkdownV2' });
       return;
     }
 
@@ -290,15 +306,18 @@ export async function handleTranslate(ctx: BotContext): Promise<void> {
       sourceLanguage
     );
 
-    const responseMessage = `🌐 **Translation:**
+    let responseMessage = '🌐 **Translation:**\n\n';
+    responseMessage += `**From ${formatSafeMarkdown(languageUtils.getLanguageName(sourceLanguage))}:**\n`;
+    responseMessage += formatSafeMarkdown(textToTranslate, { maxLength: 1000 }) + '\n\n';
+    responseMessage += `**To ${formatSafeMarkdown(languageUtils.getLanguageName(userLanguage))}:**\n`;
+    responseMessage += formatSafeMarkdown(translatedText, { maxLength: 1000 });
 
-**From ${languageUtils.getLanguageName(sourceLanguage)}:**
-${textToTranslate}
-
-**To ${languageUtils.getLanguageName(userLanguage)}:**
-${translatedText}`;
-
-    await ctx.reply(responseMessage, { parse_mode: 'Markdown' });
+    // Use splitMessage to handle long responses
+    const messageChunks = splitMessage(responseMessage);
+    
+    for (const chunk of messageChunks) {
+      await ctx.reply(chunk, { parse_mode: 'MarkdownV2' });
+    }
     
     logUserAction(telegramLogger, userId, chatId, 'translate_command', {
       sourceLanguage,
@@ -345,24 +364,33 @@ export async function handleRemind(ctx: BotContext): Promise<void> {
       return;
     }
 
-    let responseMessage = `📋 **Pending Action Items:**\n\n`;
+    let responseMessage = '📋 **Pending Action Items:**\n\n';
     
-    actionItems.slice(0, 10).forEach((item, index) => {
+    const actionItemsList = actionItems.slice(0, 10).map((item, index) => {
       const priorityEmoji = item.priority === 'high' ? '🔴' : item.priority === 'medium' ? '🟡' : '🟢';
       const statusEmoji = item.status === 'in_progress' ? '⏳' : '⏸️';
-      const assigneeText = item.assignee ? ` (${item.assignee})` : '';
+      const assigneeText = item.assignee ? ` (${formatSafeMarkdown(item.assignee)})` : '';
       
-      responseMessage += `${index + 1}. ${priorityEmoji} ${statusEmoji} **${item.title}**${assigneeText}\n`;
-      responseMessage += `   ${item.description}\n\n`;
+      const title = formatSafeMarkdown(item.title, { maxLength: 100 });
+      const description = formatSafeMarkdown(item.description, { maxLength: 200 });
+      
+      return `${priorityEmoji} ${statusEmoji} **${title}**${assigneeText}\n   ${description}`;
     });
 
+    responseMessage += formatList(actionItemsList, { numbered: true, maxItems: 10 });
+
     if (actionItems.length > 10) {
-      responseMessage += `_... and ${actionItems.length - 10} more items_\n\n`;
+      responseMessage += `\n\n_\\.\\.\\. and ${actionItems.length - 10} more items_`;
     }
 
-    responseMessage += `💡 **Tip:** I automatically extract action items from your conversations. Keep discussing your tasks and I'll help you track them!`;
+    responseMessage += '\n\n💡 **Tip:** I automatically extract action items from your conversations\\. Keep discussing your tasks and I\'ll help you track them\\!';
 
-    await ctx.reply(responseMessage, { parse_mode: 'Markdown' });
+    // Use splitMessage to handle long responses
+    const messageChunks = splitMessage(responseMessage);
+    
+    for (const chunk of messageChunks) {
+      await ctx.reply(chunk, { parse_mode: 'MarkdownV2' });
+    }
     
     logUserAction(telegramLogger, userId, chatId, 'remind_command', {
       actionItemsCount: actionItems.length

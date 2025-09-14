@@ -115,7 +115,17 @@ export const searchResources = query({
       index === self.findIndex(r => r._id === resource._id)
     );
 
-    return unique.slice(0, args.limit || 20);
+    // Map to SearchResult format
+    return unique.slice(0, args.limit || 20).map((resource) => ({
+      id: resource._id,
+      type: 'resource' as const,
+      content: resource.content,
+      relevanceScore: 0.8, // Static placeholder as requested
+      context: resource.summary,
+      timestamp: resource.extractedAt,
+      chatId: resource.chatId,
+      userId: resource.userId
+    }));
   },
 });
 
