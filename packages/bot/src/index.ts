@@ -1,4 +1,5 @@
 import { Telegraf } from 'telegraf';
+import type { Update } from 'telegraf/typings/core/types/typegram';
 import express from 'express';
 import cors from 'cors';
 import helmet from 'helmet';
@@ -23,7 +24,7 @@ app.use(cors());
 app.use(express.json());
 
 // Health check endpoint
-app.get('/health', (req, res) => {
+app.get('/health', (_req, res) => {
   res.json({
     status: 'healthy',
     timestamp: new Date().toISOString(),
@@ -41,7 +42,7 @@ app.post('/webhook/telegram', (req, res) => {
   }
   
   bot.handleUpdate(req.body);
-  res.sendStatus(200);
+  return res.sendStatus(200);
 });
 
 // Initialize Telegram bot
@@ -86,8 +87,8 @@ bot.hears(/^\/(\w+)(.*)/, async (ctx, next) => {
       botLogger.info('Plugin command executed', {
         command: commandName,
         args: args.length,
-        chatId: ctx.chat?.id.toString(),
-        userId: ctx.from?.id.toString()
+        chatId: ctx.chat?.id.toString() || 'unknown',
+        userId: ctx.from?.id.toString() || 'unknown'
       });
       return; // Command handled by plugin
     }

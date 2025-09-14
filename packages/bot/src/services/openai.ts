@@ -2,7 +2,6 @@ import OpenAI from 'openai';
 import { openaiConfig, visionConfig } from '@/config/env';
 import { openaiLogger, logError, logApiCall } from '@/utils/logger';
 import { 
-  OpenAIResponse, 
   LanguageDetectionResult, 
   Decision, 
   ActionItem, 

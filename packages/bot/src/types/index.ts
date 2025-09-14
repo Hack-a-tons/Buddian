@@ -1,4 +1,4 @@
-import { Context } from 'telegraf';
+import { Context, Telegraf } from 'telegraf';
 
 // Core domain types
 export interface Message {
@@ -9,7 +9,7 @@ export interface Message {
   timestamp: number;
   language: string;
   messageType: 'text' | 'photo' | 'document' | 'voice' | 'video' | 'sticker' | 'location';
-  metadata?: Record<string, any>;
+  metadata?: FileMetadata;
   decisions?: Decision[];
   actionItems?: ActionItem[];
   threadId?: string;
@@ -70,6 +70,16 @@ export interface Resource {
   extractedAt: number;
   chatId: string;
   userId: string;
+}
+
+export interface FileMetadata {
+  fileId?: string;
+  fileName?: string;
+  mimeType?: string;
+  fileSize?: number;
+  telegramMessageId?: number;
+  telegramUserId?: number;
+  telegramChatId?: number;
 }
 
 export interface ResourceMetadata {
@@ -193,7 +203,7 @@ export interface BotConfig {
   telegram: {
     token: string;
     webhookUrl?: string;
-    allowedUpdates: string[];
+    allowedUpdates: Telegraf.LaunchOptions['allowedUpdates'];
   };
   convex: {
     url: string;

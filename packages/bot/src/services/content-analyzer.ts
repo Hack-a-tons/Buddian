@@ -2,8 +2,6 @@ import axios from 'axios';
 import sharp from 'sharp';
 import pdfParse from 'pdf-parse';
 import * as cheerio from 'cheerio';
-import { createReadStream, createWriteStream } from 'fs';
-import { pipeline } from 'stream/promises';
 import { contentLogger, logError, logContentAnalysis } from '@/utils/logger';
 import { visionConfig } from '@/config/env';
 import { 
@@ -177,7 +175,7 @@ export const imageService = {
     }
   },
 
-  async extractImageText(buffer: Buffer): Promise<string> {
+  async extractImageText(_buffer: Buffer): Promise<string> {
     // This would use Azure Computer Vision OCR API
     // For now, return empty string as placeholder
     if (!visionConfig) {

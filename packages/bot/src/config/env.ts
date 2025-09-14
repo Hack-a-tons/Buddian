@@ -62,20 +62,23 @@ if (!parseResult.success) {
 
 const env = parseResult.data;
 
+// Define allowed updates with proper typing
+const allowedUpdates: NonNullable<BotConfig['telegram']['allowedUpdates']> = [
+  'message',
+  'edited_message',
+  'callback_query',
+  'inline_query',
+  'chosen_inline_result',
+  'my_chat_member',
+  'chat_member',
+];
+
 // Create typed configuration object
 export const config: BotConfig = {
   telegram: {
     token: env.TELEGRAM_BOT_TOKEN,
     ...(env.TELEGRAM_WEBHOOK_BASE_URL && { webhookUrl: env.TELEGRAM_WEBHOOK_BASE_URL }),
-    allowedUpdates: [
-      'message',
-      'edited_message',
-      'callback_query',
-      'inline_query',
-      'chosen_inline_result',
-      'my_chat_member',
-      'chat_member',
-    ],
+    allowedUpdates,
   },
   convex: {
     url: env.CONVEX_URL,

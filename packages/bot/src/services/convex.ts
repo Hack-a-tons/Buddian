@@ -18,7 +18,7 @@ const convex = new ConvexClient(convexConfig.url);
 
 // Set authentication if admin key is provided
 if (convexConfig.adminKey) {
-  convex.setAuth(async () => convexConfig.adminKey);
+  convex.setAuth(() => Promise.resolve(convexConfig.adminKey!));
 }
 
 // Connection management
@@ -26,8 +26,9 @@ let isConnected = false;
 let reconnectAttempts = 0;
 const maxReconnectAttempts = 5;
 
-convex.onTransition((isConnected_: boolean) => {
-  isConnected = isConnected_;
+// Handle connection state changes
+const unsubscribeConn = convex.subscribeToConnectionState((state) => {
+  isConnected = state.hasInflightRequests || state.isWebSocketConnected;
   if (isConnected) {
     convexLogger.info('Connected to Convex');
     reconnectAttempts = 0;
@@ -327,7 +328,7 @@ export const searchService = {
 export const healthService = {
   async checkConnection(): Promise<boolean> {
     try {
-      await convex.query(api.health.ping);
+      await convex.query(api.health.ping, {});
       return true;
     } catch (error) {
       logError(convexLogger, error as Error, { operation: 'healthCheck' });
@@ -337,7 +338,7 @@ export const healthService = {
 
   async getStats(): Promise<Record<string, any>> {
     return executeOperation(
-      () => convex.query(api.health.getStats),
+      () => convex.query(api.health.getStats, {}),
       'getStats'
     );
   }
@@ -346,32 +347,21 @@ export const healthService = {
 // Real-time subscriptions
 export const subscriptionService = {
   subscribeToMessages(chatId: string, callback: (messages: Message[]) => void) {
-    return convex.subscribe(
-      api.messages.getMessages,
-      { chatId, limit: 50 },
-      callback
-    );
+    return convex.onUpdate(api.messages.getMessages, { chatId, limit: 50 }, callback);
   },
 
   subscribeToResources(chatId: string, callback: (resources: Resource[]) => void) {
-    return convex.subscribe(
-      api.resources.getResources,
-      { chatId, limit: 20 },
-      callback
-    );
+    return convex.onUpdate(api.resources.getResources, { chatId, limit: 20 }, callback);
   },
 
   subscribeToThreads(chatId: string, callback: (threads: ConversationThread[]) => void) {
-    return convex.subscribe(
-      api.threads.getActiveThreads,
-      { chatId, limit: 10 },
-      callback
-    );
+    return convex.onUpdate(api.threads.getActiveThreads, { chatId, limit: 10 }, callback);
   }
 };
 
 // Cleanup function
 export const cleanup = () => {
+  unsubscribeConn();
   convex.close();
   convexLogger.info('Convex client closed');
 };

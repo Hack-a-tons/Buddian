@@ -238,9 +238,9 @@ function detectLanguageByPatterns(text: string): LanguageDetectionResult {
   const [topLang, topScore] = sortedScores[0];
   const confidence = Math.min(topScore * 2, 0.9); // Cap at 0.9 for pattern detection
   
-  const alternatives = sortedScores.slice(1).map(([lang, score]) => ({
-    language: lang,
-    confidence: Math.min(score * 2, 0.8)
+  const alternatives = sortedScores.slice(1).map((entry) => ({
+    language: entry[0],
+    confidence: Math.min(entry[1] * 2, 0.8)
   }));
   
   return {

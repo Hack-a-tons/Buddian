@@ -12,9 +12,19 @@ interface PluginCommand {
   execute: (ctx: BotContext, args: string[]) => Promise<void>;
 }
 
+interface PluginContext {
+  userId: string;
+  chatId: string;
+  messageId: string;
+  language: string;
+  timestamp: number;
+  metadata: Record<string, any>;
+}
+
 interface PluginEvent {
   type: string;
   data: any;
+  context: PluginContext;
   timestamp: number;
 }
 

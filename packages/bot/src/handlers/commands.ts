@@ -1,10 +1,10 @@
 import { BotContext } from '@/types';
-import { messageService, userService, resourceService, searchService } from '@/services/convex';
+import { messageService, userService, resourceService } from '@/services/convex';
 import openaiService from '@/services/openai';
 import languageUtils from '@/utils/language';
 import { telegramLogger, logError, logUserAction } from '@/utils/logger';
 import { pluginManager } from '@/plugins/manager';
-import { formatSafeMarkdown, formatList, splitMessage, formatSearchResult } from '@/utils/formatting';
+import { formatSafeMarkdown, formatList, splitMessage } from '@/utils/formatting';
 
 // Start command handler
 export async function handleStart(ctx: BotContext): Promise<void> {
@@ -522,7 +522,7 @@ export async function handlePlugins(ctx: BotContext): Promise<void> {
     
     // Group commands by plugin
     const commandsByPlugin = new Map<string, typeof availableCommands>();
-    availableCommands.forEach(({ plugin, command }) => {
+    availableCommands.forEach(({ plugin, command }, _index) => {
       if (!commandsByPlugin.has(plugin)) {
         commandsByPlugin.set(plugin, []);
       }
@@ -549,7 +549,7 @@ export async function handlePlugins(ctx: BotContext): Promise<void> {
     // Add plugin statistics
     if (pluginStats.length > 0) {
       responseMessage += `**📊 Plugin Statistics:**\n`;
-      pluginStats.forEach(stat => {
+      pluginStats.forEach((stat, _index) => {
         const statusEmoji = stat.active ? '✅' : '❌';
         responseMessage += `${statusEmoji} **${stat.name}**: ${stat.stats.executions} executions, ${stat.commandCount} commands\n`;
       });

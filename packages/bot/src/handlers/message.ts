@@ -1,4 +1,3 @@
-import { Context } from 'telegraf';
 import { Message } from 'telegraf/typings/core/types/typegram';
 import { messageService, userService, resourceService } from '@/services/convex';
 import openaiService from '@/services/openai';
@@ -11,9 +10,8 @@ import {
   Message as BuddianMessage, 
   User as BuddianUser,
   Resource,
-  Decision,
-  ActionItem,
-  BuddianError 
+  BuddianError,
+  FileMetadata
 } from '@/types';
 
 // Message type mapping
@@ -41,23 +39,23 @@ const extractMessageContent = (message: Message): string => {
 };
 
 // Get file info from message
-const getFileInfo = (message: Message): { fileId?: string; fileName?: string; mimeType?: string; fileSize?: number } => {
+const getFileInfo = (message: Message): FileMetadata => {
   if ('document' in message) {
     return {
       fileId: message.document.file_id,
-      fileName: message.document.file_name,
-      mimeType: message.document.mime_type,
-      fileSize: message.document.file_size
+      fileName: message.document.file_name || undefined,
+      mimeType: message.document.mime_type || undefined,
+      fileSize: message.document.file_size || undefined
     };
   }
   
-  if ('photo' in message) {
+  if ('photo' in message && message.photo && message.photo.length > 0) {
     const photo = message.photo[message.photo.length - 1]; // Get largest photo
     return {
-      fileId: photo.file_id,
+      fileId: photo?.file_id,
       fileName: `photo_${Date.now()}.jpg`,
       mimeType: 'image/jpeg',
-      fileSize: photo.file_size
+      fileSize: photo?.file_size || undefined
     };
   }
   
@@ -65,8 +63,8 @@ const getFileInfo = (message: Message): { fileId?: string; fileName?: string; mi
     return {
       fileId: message.voice.file_id,
       fileName: `voice_${Date.now()}.ogg`,
-      mimeType: message.voice.mime_type,
-      fileSize: message.voice.file_size
+      mimeType: message.voice.mime_type || undefined,
+      fileSize: message.voice.file_size || undefined
     };
   }
   
@@ -74,8 +72,8 @@ const getFileInfo = (message: Message): { fileId?: string; fileName?: string; mi
     return {
       fileId: message.video.file_id,
       fileName: message.video.file_name || `video_${Date.now()}.mp4`,
-      mimeType: message.video.mime_type,
-      fileSize: message.video.file_size
+      mimeType: message.video.mime_type || undefined,
+      fileSize: message.video.file_size || undefined
     };
   }
   
@@ -132,6 +130,7 @@ export async function handleMessage(ctx: BotContext): Promise<void> {
     }
     
     // Create message object
+    const fileInfo = getFileInfo(message);
     const buddianMessage: Omit<BuddianMessage, 'id'> = {
       chatId,
       userId: user.id,
@@ -143,7 +142,7 @@ export async function handleMessage(ctx: BotContext): Promise<void> {
         telegramMessageId: message.message_id,
         telegramUserId: message.from.id,
         telegramChatId: message.chat.id,
-        ...getFileInfo(message)
+        ...fileInfo
       }
     };
     
@@ -169,7 +168,14 @@ export async function handleMessage(ctx: BotContext): Promise<void> {
       await pluginManager.broadcastEvent({
         type: 'message_received',
         data: { ...buddianMessage, id: storedMessageId },
-        context: { userId: user.id, chatId, language: detectedLanguage },
+        context: {
+          userId: user.id,
+          chatId,
+          messageId: storedMessageId,
+          language: detectedLanguage,
+          timestamp: Date.now(),
+          metadata: buddianMessage.metadata || {}
+        },
         timestamp: Date.now()
       });
     } catch (error) {
