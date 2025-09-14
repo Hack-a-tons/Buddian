@@ -1,0 +1,7 @@
+{
+  "functions": "convex/",
+  "generateCommonJSApi": true,
+  "node": {
+    "externalPackages": ["@discordjs/rest", "@discordjs/builders"]
+  }
+}

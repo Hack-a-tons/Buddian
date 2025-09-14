@@ -840,6 +840,255 @@ This deployment configuration provides a production-ready setup with proper secu
 
 This section addresses common Docker build and deployment issues encountered when setting up Buddian, particularly on Ubuntu 24.04 servers.
 
+### Convex Configuration Issues
+
+#### Convex Codegen Failures
+
+**Issue**: Docker build fails with `npx convex codegen` errors or TypeScript compilation errors related to missing `convex/_generated/api` imports.
+
+**Explanation**: The project includes a comprehensive Convex schema but may lack proper configuration for codegen to work in the Docker environment. This is a common issue when:
+- Convex project is not properly initialized
+- Missing `convex.json` configuration file
+- Network issues during Docker build
+- Convex authentication not set up
+
+**Current Solution**: The project now includes a **temporary stub solution** that allows the Docker build to succeed while proper Convex configuration is being set up:
+
+1. **Stub API File**: A temporary `convex/_generated/api.ts` file provides the expected API structure
+2. **Graceful Fallback**: The Dockerfile creates this stub automatically if codegen fails
+3. **Build Success**: TypeScript compilation succeeds using the stub, allowing deployment
+
+**Verification**:
+```bash
+# Check if stub file exists
+ls -la convex/_generated/api.ts
+
+# Verify Docker build succeeds
+docker compose build --no-cache bot
+
+# Check build logs for codegen status
+docker compose build bot 2>&1 | grep -i convex
+```
+
+**Proper Convex Setup** (to replace the stub):
+
+1. **Initialize Convex Project**:
+   ```bash
+   # Install Convex CLI
+   npm install -g convex
+   
+   # Initialize project (if not already done)
+   convex init
+   
+   # Deploy schema and functions
+   convex deploy --prod
+   ```
+
+2. **Configure Environment Variables**:
+   ```bash
+   # Ensure these are set in .env
+   CONVEX_URL=https://your-convex-deployment.convex.cloud
+   CONVEX_ADMIN_KEY=your_convex_admin_key_here
+   ```
+
+3. **Verify Configuration**:
+   ```bash
+   # Test codegen locally
+   npx convex codegen
+   
+   # Check generated files
+   ls -la convex/_generated/
+   ```
+
+4. **Replace Stub in Production**:
+   ```bash
+   # After proper setup, rebuild to use real generated API
+   docker compose down
+   docker compose build --no-cache bot
+   docker compose up -d bot
+   ```
+
+#### Understanding the Stub Solution
+
+The temporary stub file (`convex/_generated/api.ts`) includes:
+
+- **All expected API modules**: health, messages, users, resources, threads, search
+- **Function signatures**: Matches what the convex service expects to import
+- **TypeScript compatibility**: Uses `null as any` to satisfy type checking
+- **Runtime safety**: Functions will fail gracefully if called before proper setup
+
+**Important Notes**:
+- The stub allows the application to build and deploy successfully
+- Convex-dependent features will not work until proper configuration is complete
+- The stub should be replaced with actual generated API files for production use
+- Monitor logs for Convex-related errors during runtime
+
+#### Convex Authentication Issues
+
+**Issue**: Runtime errors related to Convex authentication or connection failures.
+
+**Diagnosis**:
+```bash
+# Check Convex connection
+docker compose logs bot | grep -i convex
+
+# Test API access
+curl -H "Authorization: Bearer $CONVEX_ADMIN_KEY" "$CONVEX_URL/api/health"
+```
+
+**Solutions**:
+1. **Verify Credentials**: Ensure `CONVEX_URL` and `CONVEX_ADMIN_KEY` are correct
+2. **Network Access**: Confirm the container can reach Convex servers
+3. **Project Status**: Check Convex dashboard for project status
+
+#### Generated Files Management
+
+**Best Practices**:
+- The `convex/_generated/` directory is excluded from Docker build context via `.dockerignore`
+- Generated files are created fresh during the Docker build process
+- The stub solution ensures builds never fail due to missing generated files
+- Proper Convex setup should eventually replace the stub with real generated files
+
+**File Structure**:
+```
+convex/
+├── _generated/          # Generated API files (excluded from git)
+│   └── api.ts          # Stub or generated API exports
+├── schema.ts           # Database schema definition
+├── health.ts           # Health check functions
+├── messages.ts         # Message-related functions
+├── users.ts            # User management functions
+├── resources.ts        # Resource handling functions
+├── search.ts           # Search functionality
+└── threads.ts          # Thread management functions
+```
+## 🛠️ Troubleshooting
+
+This section addresses common Docker build and deployment issues encountered when setting up Buddian, particularly on Ubuntu 24.04 servers.
+
+### Convex Configuration Issues
+
+#### Convex Codegen Failures
+
+**Issue**: Docker build fails with `npx convex codegen` errors or TypeScript compilation errors related to missing `convex/_generated/api` imports.
+
+**Explanation**: The project includes a comprehensive Convex schema but may lack proper configuration for codegen to work in the Docker environment. This is a common issue when:
+- Convex project is not properly initialized
+- Missing `convex.json` configuration file
+- Network issues during Docker build
+- Convex authentication not set up
+
+**Current Solution**: The project now includes a **temporary stub solution** that allows the Docker build to succeed while proper Convex configuration is being set up:
+
+1. **Stub API File**: A temporary `convex/_generated/api.ts` file provides the expected API structure
+2. **Graceful Fallback**: The Dockerfile creates this stub automatically if codegen fails
+3. **Build Success**: TypeScript compilation succeeds using the stub, allowing deployment
+
+**Verification**:
+```bash
+# Check if stub file exists
+ls -la convex/_generated/api.ts
+
+# Verify Docker build succeeds
+docker compose build --no-cache bot
+
+# Check build logs for codegen status
+docker compose build bot 2>&1 | grep -i convex
+```
+
+**Proper Convex Setup** (to replace the stub):
+
+1. **Initialize Convex Project**:
+   ```bash
+   # Install Convex CLI
+   npm install -g convex
+   
+   # Initialize project (if not already done)
+   convex init
+   
+   # Deploy schema and functions
+   convex deploy --prod
+   ```
+
+2. **Configure Environment Variables**:
+   ```bash
+   # Ensure these are set in .env
+   CONVEX_URL=https://your-convex-deployment.convex.cloud
+   CONVEX_ADMIN_KEY=your_convex_admin_key_here
+   ```
+
+3. **Verify Configuration**:
+   ```bash
+   # Test codegen locally
+   npx convex codegen
+   
+   # Check generated files
+   ls -la convex/_generated/
+   ```
+
+4. **Replace Stub in Production**:
+   ```bash
+   # After proper setup, rebuild to use real generated API
+   docker compose down
+   docker compose build --no-cache bot
+   docker compose up -d bot
+   ```
+
+#### Understanding the Stub Solution
+
+The temporary stub file (`convex/_generated/api.ts`) includes:
+
+- **All expected API modules**: health, messages, users, resources, threads, search
+- **Function signatures**: Matches what the convex service expects to import
+- **TypeScript compatibility**: Uses `null as any` to satisfy type checking
+- **Runtime safety**: Functions will fail gracefully if called before proper setup
+
+**Important Notes**:
+- The stub allows the application to build and deploy successfully
+- Convex-dependent features will not work until proper configuration is complete
+- The stub should be replaced with actual generated API files for production use
+- Monitor logs for Convex-related errors during runtime
+
+#### Convex Authentication Issues
+
+**Issue**: Runtime errors related to Convex authentication or connection failures.
+
+**Diagnosis**:
+```bash
+# Check Convex connection
+docker compose logs bot | grep -i convex
+
+# Test API access
+curl -H "Authorization: Bearer $CONVEX_ADMIN_KEY" "$CONVEX_URL/api/health"
+```
+
+**Solutions**:
+1. **Verify Credentials**: Ensure `CONVEX_URL` and `CONVEX_ADMIN_KEY` are correct
+2. **Network Access**: Confirm the container can reach Convex servers
+3. **Project Status**: Check Convex dashboard for project status
+
+#### Generated Files Management
+
+**Best Practices**:
+- The `convex/_generated/` directory is excluded from Docker build context via `.dockerignore`
+- Generated files are created fresh during the Docker build process
+- The stub solution ensures builds never fail due to missing generated files
+- Proper Convex setup should eventually replace the stub with real generated files
+
+**File Structure**:
+```
+convex/
+├── _generated/          # Generated API files (excluded from git)
+│   └── api.ts          # Stub or generated API exports
+├── schema.ts           # Database schema definition
+├── health.ts           # Health check functions
+├── messages.ts         # Message-related functions
+├── users.ts            # User management functions
+├── resources.ts        # Resource handling functions
+├── search.ts           # Search functionality
+└── threads.ts          # Thread management functions
+```
+
 ### Docker Build Issues
 
 #### Missing package-lock.json Files

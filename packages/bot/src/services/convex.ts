@@ -1,5 +1,5 @@
 import { ConvexClient } from 'convex/browser';
-import { api } from '../../../../convex/_generated/api';
+import { convexApi as api } from '../external/convexApi';
 import { convexConfig } from '@/config/env';
 import { convexLogger, logError, logDatabaseOperation } from '@/utils/logger';
 import { 

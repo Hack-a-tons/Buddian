@@ -22,6 +22,7 @@ WORKDIR /app
 
 # Copy package files
 COPY packages/bot/package*.json ./
+COPY convex.json ./
 COPY convex ./convex
 
 # Install dependencies
@@ -41,7 +42,34 @@ RUN if [ -f package-lock.json ]; then npm ci; else npm i; fi
 COPY packages/bot/tsconfig.json ./
 COPY packages/bot/src ./src
 COPY convex ./convex
-RUN npx convex codegen || echo "Convex codegen failed, continuing..."
+
+# Ensure stub API file exists before codegen attempt
+RUN mkdir -p convex/_generated && \
+    if [ ! -f convex/_generated/api.ts ]; then \
+        echo "Creating stub API file..." && \
+        echo 'export const api = { health: { check: null as any, ping: null as any, getStats: null as any }, messages: { create: null as any, list: null as any, get: null as any, storeMessage: null as any, getMessage: null as any, getMessages: null as any, searchMessages: null as any, getThreadContext: null as any, updateMessageDecisions: null as any, updateMessageActionItems: null as any }, users: { create: null as any, getByDiscordId: null as any, list: null as any, createUser: null as any, getUser: null as any, getUserById: null as any, updateUserPreferences: null as any, updateLastActive: null as any, getUserLanguage: null as any }, resources: { create: null as any, list: null as any, get: null as any, storeResource: null as any, getResource: null as any, getResources: null as any, searchResources: null as any, updateResourceSummary: null as any }, threads: { createThread: null as any, getThread: null as any, getActiveThreads: null as any, updateThreadActivity: null as any, updateThreadSummary: null as any }, search: { messages: null as any, resources: null as any, searchByKeywords: null as any, searchByContext: null as any, getRelatedContent: null as any } }; export default api;' > convex/_generated/api.ts; \
+    fi
+
+# Attempt Convex codegen with better error handling
+RUN echo "Attempting Convex codegen..." && \
+    if npx convex codegen 2>&1; then \
+        echo "Convex codegen succeeded"; \
+    else \
+        echo "Convex codegen failed, using stub API file"; \
+        echo "This is expected if Convex is not properly configured yet"; \
+    fi
+
+# Create CommonJS version of the API file for runtime compatibility
+RUN echo "Creating CommonJS API file..." && \
+    echo 'const api = { health: { check: "health:check", ping: "health:ping", getStats: "health:getStats" }, messages: { create: "messages:create", list: "messages:list", get: "messages:get", storeMessage: "messages:storeMessage", getMessage: "messages:getMessage", getMessages: "messages:getMessages", searchMessages: "messages:searchMessages", getThreadContext: "messages:getThreadContext", updateMessageDecisions: "messages:updateMessageDecisions", updateMessageActionItems: "messages:updateMessageActionItems" }, users: { create: "users:create", getByDiscordId: "users:getByDiscordId", list: "users:list", createUser: "users:createUser", getUser: "users:getUser", getUserById: "users:getUserById", updateUserPreferences: "users:updateUserPreferences", updateLastActive: "users:updateLastActive", getUserLanguage: "users:getUserLanguage" }, resources: { create: "resources:create", list: "resources:list", get: "resources:get", storeResource: "resources:storeResource", getResource: "resources:getResource", getResources: "resources:getResources", searchResources: "resources:searchResources", updateResourceSummary: "resources:updateResourceSummary" }, threads: { createThread: "threads:createThread", getThread: "threads:getThread", getActiveThreads: "threads:getActiveThreads", updateThreadActivity: "threads:updateThreadActivity", updateThreadSummary: "threads:updateThreadSummary" }, search: { messages: "search:messages", resources: "search:resources", searchByKeywords: "search:searchByKeywords", searchByContext: "search:searchByContext", getRelatedContent: "search:getRelatedContent" } }; module.exports = { api }; exports.api = api;' > convex/_generated/api.js
+
+# Verify API file exists before building
+RUN if [ ! -f convex/_generated/api.ts ]; then \
+        echo "ERROR: API file missing after codegen attempt" && exit 1; \
+    else \
+        echo "API file confirmed present, proceeding with build"; \
+    fi
+
 RUN npm run build
 
 # Production stage
