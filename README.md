@@ -614,6 +614,10 @@ sudo systemctl reload nginx
 # Navigate to project directory
 cd /opt/buddian
 
+# Pre-create and set permissions for bind-mounted directories
+sudo mkdir -p logs uploads
+sudo chown -R 1001:1001 logs uploads
+
 # Build and start services (production mode)
 docker compose up -d bot
 
@@ -832,7 +836,375 @@ echo "0 2 * * * /opt/backup-buddian.sh" | sudo crontab -
 
 This deployment configuration provides a production-ready setup with proper security, monitoring, and maintenance procedures for Ubuntu 24.04 servers.
 
-## 🔒 Security
+## 🛠️ Troubleshooting
+
+This section addresses common Docker build and deployment issues encountered when setting up Buddian, particularly on Ubuntu 24.04 servers.
+
+### Docker Build Issues
+
+#### Missing package-lock.json Files
+
+**Issue**: Docker build fails with error `npm ERR! The package-lock.json file was created for a different version of Node.js or npm`
+
+**Explanation**: The Dockerfile has been updated to use `npm install` instead of `npm ci` for fresh deployments. This is expected behavior when deploying without pre-existing lock files.
+
+**Solution**: This is normal and expected. The build process will:
+1. Use `npm install` to install dependencies
+2. Generate `package-lock.json` files during the build process
+3. Create a production-ready container
+
+**Verification**:
+```bash
+# Check build logs for successful dependency installation
+docker compose build --no-cache bot
+docker compose logs bot
+```
+
+#### Docker Compose Version Warnings
+
+**Issue**: Warning message `version is obsolete` when running `docker compose up`
+
+**Explanation**: The `version: '3.8'` field has been removed from `docker-compose.yml` as it's no longer needed in modern Docker Compose versions.
+
+**Solution**: This warning has been eliminated. If you still see it, ensure you're using the updated `docker-compose.yml` file.
+
+**Verification**:
+```bash
+# Check Docker Compose version
+docker compose version
+
+# Verify no version field in compose file
+head -5 docker-compose.yml
+```
+
+#### Environment Variable Warnings
+
+**Issue**: Warnings about missing `AZURE_VISION_ENDPOINT` or `AZURE_VISION_KEY` variables
+
+**Explanation**: These variables are optional and have been configured with default empty values using the `${VARIABLE:-}` syntax.
+
+**Solution**: These warnings are eliminated. The Azure Vision variables are truly optional:
+- If you have Azure Computer Vision, set them in `.env`
+- If you don't need image analysis, leave them unset
+
+**Configuration**:
+```bash
+# Optional: Add to .env only if you have Azure Computer Vision
+AZURE_VISION_ENDPOINT=https://your-vision-resource.cognitiveservices.azure.com/
+AZURE_VISION_KEY=your_azure_vision_key_here
+
+# Or leave them unset - the bot will work without image analysis
+```
+
+### Build Troubleshooting Commands
+
+#### Clear Docker Build Cache
+
+```bash
+# Remove all build cache
+docker builder prune -a
+
+# Remove specific images
+docker rmi $(docker images -q buddian*)
+
+# Rebuild from scratch
+docker compose build --no-cache --pull bot
+```
+
+#### Check Build Context Size
+
+```bash
+# Check what's being sent to Docker daemon
+docker compose build bot 2>&1 | grep "Sending build context"
+
+# Verify .dockerignore is working
+docker compose build --progress=plain bot | grep "COPY"
+```
+
+#### Debug Build Process
+
+```bash
+# Build with detailed output
+docker compose build --progress=plain bot
+
+# Build specific stage for debugging
+docker build --target=build -f packages/bot/Dockerfile .
+
+# Interactive debugging
+docker run -it --rm node:18-alpine sh
+```
+
+### Runtime Issues
+
+#### Service Startup Problems
+
+**Issue**: Bot service fails to start or exits immediately
+
+**Diagnosis**:
+```bash
+# Check service status
+docker compose ps
+
+# View detailed logs
+docker compose logs --tail=100 bot
+
+# Check container exit code
+docker compose ps -a
+```
+
+**Common Solutions**:
+1. **Environment variables**: Verify all required variables are set
+   ```bash
+   docker compose exec bot env | grep -E "(TELEGRAM|CONVEX|AZURE)"
+   ```
+
+2. **Port conflicts**: Ensure port 3000 is available
+   ```bash
+   sudo netstat -tlnp | grep :3000
+   sudo lsof -i :3000
+   ```
+
+3. **Memory issues**: Check available memory
+   ```bash
+   free -h
+   docker stats
+   ```
+
+#### Database Connection Issues
+
+**Issue**: Cannot connect to Convex database
+
+**Diagnosis**:
+```bash
+# Test Convex connection
+docker compose run --rm convex-dev sh -c "convex dashboard"
+
+# Check environment variables
+docker compose exec bot env | grep CONVEX
+```
+
+**Solutions**:
+1. **Verify Convex credentials**:
+   ```bash
+   # Test API access
+   curl -H "Authorization: Bearer $CONVEX_ADMIN_KEY" "$CONVEX_URL/api/health"
+   ```
+
+2. **Network connectivity**:
+   ```bash
+   # Test from container
+   docker compose exec bot ping -c 3 convex.cloud
+   ```
+
+#### Telegram Webhook Issues
+
+**Issue**: Bot doesn't receive messages
+
+**Diagnosis**:
+```bash
+# Check webhook status
+curl "https://api.telegram.org/bot$TELEGRAM_BOT_TOKEN/getWebhookInfo"
+
+# Test webhook endpoint
+curl -f https://app.buddian.com/health
+```
+
+**Solutions**:
+1. **Reset webhook**:
+   ```bash
+   # Delete existing webhook
+   curl -X POST "https://api.telegram.org/bot$TELEGRAM_BOT_TOKEN/deleteWebhook"
+   
+   # Set new webhook
+   curl -X POST "https://api.telegram.org/bot$TELEGRAM_BOT_TOKEN/setWebhook" \
+        -H "Content-Type: application/json" \
+        -d '{"url": "https://app.buddian.com/webhook/telegram"}'
+   ```
+
+2. **Check nginx configuration**:
+   ```bash
+   sudo nginx -t
+   sudo systemctl status nginx
+   ```
+
+### Performance Issues
+
+#### High Memory Usage
+
+**Issue**: Container using excessive memory
+
+**Diagnosis**:
+```bash
+# Monitor container resources
+docker stats buddian-bot
+
+# Check Node.js memory usage
+docker compose exec bot node -e "console.log(process.memoryUsage())"
+```
+
+**Solutions**:
+1. **Restart services**:
+   ```bash
+   docker compose restart bot
+   ```
+
+2. **Adjust memory limits**:
+   ```yaml
+   # Add to docker-compose.yml bot service
+   deploy:
+     resources:
+       limits:
+         memory: 1G
+       reservations:
+         memory: 512M
+   ```
+
+#### Slow Response Times
+
+**Issue**: Bot responses are slow
+
+**Diagnosis**:
+```bash
+# Check response times
+curl -w "@curl-format.txt" -o /dev/null -s https://app.buddian.com/health
+
+# Monitor API calls
+docker compose logs -f bot | grep -E "(request|response|duration)"
+```
+
+**Solutions**:
+1. **Check Azure OpenAI quotas**:
+   - Monitor API usage in Azure Portal
+   - Verify rate limits aren't exceeded
+
+2. **Optimize database queries**:
+   - Check Convex dashboard for slow queries
+   - Monitor database performance metrics
+
+### Log Analysis
+
+#### Structured Log Analysis
+
+```bash
+# Filter logs by level
+docker compose logs bot | grep '"level":"error"'
+
+# Search for specific errors
+docker compose logs bot | grep -i "timeout\|connection\|failed"
+
+# Monitor real-time errors
+docker compose logs -f bot | grep '"level":"error"'
+```
+
+#### Common Error Patterns
+
+1. **Rate Limiting**:
+   ```bash
+   # Look for rate limit errors
+   docker compose logs bot | grep -i "rate.limit\|429\|quota"
+   ```
+
+2. **Authentication Errors**:
+   ```bash
+   # Check for auth failures
+   docker compose logs bot | grep -i "unauthorized\|401\|403\|invalid.key"
+   ```
+
+3. **Network Issues**:
+   ```bash
+   # Monitor network errors
+   docker compose logs bot | grep -i "timeout\|connection.refused\|dns"
+   ```
+
+### System Health Checks
+
+#### Comprehensive Health Check
+
+```bash
+#!/bin/bash
+# Buddian Health Check Script
+
+echo "=== Buddian System Health Check ==="
+
+# Docker services
+echo "1. Docker Services:"
+docker compose ps
+
+# Service health endpoints
+echo "2. Health Endpoints:"
+curl -f https://app.buddian.com/health || echo "Health check failed"
+
+# System resources
+echo "3. System Resources:"
+free -h
+df -h /
+
+# Network connectivity
+echo "4. Network Tests:"
+ping -c 3 api.telegram.org
+ping -c 3 convex.cloud
+
+# SSL certificates
+echo "5. SSL Status:"
+echo | openssl s_client -servername app.buddian.com -connect app.buddian.com:443 2>/dev/null | openssl x509 -noout -dates
+
+echo "=== Health Check Complete ==="
+```
+
+#### Automated Monitoring
+
+```bash
+# Add to crontab for regular health checks
+echo "*/5 * * * * /opt/buddian/health-check.sh >> /var/log/buddian-health.log 2>&1" | crontab -
+```
+
+### Recovery Procedures
+
+#### Complete Service Recovery
+
+```bash
+# Full service restart
+docker compose down
+docker compose pull
+docker compose up -d
+
+# Verify recovery
+docker compose ps
+docker compose logs -f bot
+```
+
+#### Database Recovery
+
+```bash
+# Redeploy Convex schema
+docker compose run --rm convex-dev sh -c "convex deploy --prod"
+
+# Verify database connectivity
+docker compose exec bot node -e "console.log('Database test')"
+```
+
+#### Emergency Rollback
+
+```bash
+# Rollback to previous version
+git log --oneline -10
+git checkout <previous-commit>
+docker compose down
+docker compose build --no-cache
+docker compose up -d
+```
+
+### Getting Help
+
+If you encounter issues not covered in this troubleshooting guide:
+
+1. **Check logs first**: Always start with `docker compose logs bot`
+2. **Search existing issues**: Check [GitHub Issues](https://github.com/your-org/buddian/issues)
+3. **Provide context**: Include logs, environment details, and steps to reproduce
+4. **System information**: Include Ubuntu version, Docker version, and hardware specs
+
+**Useful debugging information to include**:
+```
 
 ### Best Practices
 

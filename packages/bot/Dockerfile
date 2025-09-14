@@ -26,18 +26,18 @@ COPY convex ./convex
 
 # Install dependencies
 FROM base AS dependencies
-RUN npm ci --only=production && npm cache clean --force
+RUN if [ -f package-lock.json ]; then npm ci --omit=dev; else npm i --omit=dev; fi && npm cache clean --force
 
 # Development stage
 FROM base AS development
-RUN npm ci
+RUN if [ -f package-lock.json ]; then npm ci; else npm i; fi
 COPY packages/bot/tsconfig.json ./
 COPY packages/bot/src ./src
 CMD ["npm", "run", "dev"]
 
 # Build stage
 FROM base AS build
-RUN npm ci
+RUN if [ -f package-lock.json ]; then npm ci; else npm i; fi
 COPY packages/bot/tsconfig.json ./
 COPY packages/bot/src ./src
 COPY convex ./convex
