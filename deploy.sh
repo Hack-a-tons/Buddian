@@ -378,7 +378,7 @@ deploy_services() {
         log_success "Services started successfully"
         
         # Note about nginx profile
-        log_info "Note: Nginx service is disabled by default (requires 'internal-proxy' profile)"
+        log_info "Note: Nginx service is disabled by default \(requires 'internal-proxy' profile\)"
         log_info "To enable nginx: $COMPOSE_CMD --profile internal-proxy up -d"
     else
         log_error "Failed to start services"
@@ -442,7 +442,7 @@ show_next_steps() {
     echo ""
     log_info "Next steps:"
     echo "  1. Configure your external nginx/reverse proxy to point to this server"
-    echo "  2. Set up SSL certificates (Let's Encrypt recommended)"
+    echo "  2. Set up SSL certificates \(Let's Encrypt recommended\)"
     echo "  3. Configure your Telegram bot webhook to point to your domain"
     echo ""
     log_info "Useful commands:"
