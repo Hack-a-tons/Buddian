@@ -219,6 +219,127 @@ Structured logging with correlation IDs:
 }
 ```
 
+## 🚀 Quick Deployment on Ubuntu 24.04
+
+For rapid deployment on Ubuntu 24.04 servers, use the automated deployment script:
+
+```bash
+# Clone the repository
+git clone https://github.com/your-org/buddian.git
+cd buddian
+
+# Configure environment variables
+cp .env.example .env
+nano .env  # Edit with your API keys and configuration
+
+# Run the automated deployment script
+./deploy.sh
+```
+
+The `deploy.sh` script automatically:
+- ✅ Checks Docker and Docker Compose installation
+- ✅ Validates environment configuration
+- ✅ Fixes TypeScript import path issues for Docker builds
+- ✅ Cleans up previous Docker builds
+- ✅ Builds and deploys all services
+- ✅ Verifies deployment health
+- ✅ Provides next steps and troubleshooting information
+
+### What the Deployment Script Does
+
+The automated deployment script (`deploy.sh`) handles common Docker build issues and provides a streamlined deployment experience:
+
+1. **Prerequisites Check**: Verifies Docker and Docker Compose are installed and running
+2. **Environment Validation**: Ensures `.env` file exists with required configuration
+3. **Import Path Fixes**: Automatically resolves TypeScript module resolution issues in Docker builds
+4. **Clean Deployment**: Removes old containers and builds fresh images
+5. **Health Verification**: Confirms services are running correctly
+6. **Guidance**: Provides external nginx configuration examples and next steps
+
+### Troubleshooting Common Issues
+
+If you encounter issues during deployment:
+
+**Docker Build Failures:**
+```bash
+# Check Docker installation
+docker --version
+docker compose version
+
+# Verify environment file
+cat .env | grep -E "(TELEGRAM|CONVEX|AZURE)"
+
+# Check Convex generated files
+ls -la convex/_generated/api.ts
+```
+
+**Service Startup Issues:**
+```bash
+# View service logs
+docker compose logs -f bot
+
+# Check service status
+docker compose ps
+
+# Restart services if needed
+docker compose restart
+```
+
+**Webhook Configuration:**
+```bash
+# Verify webhook status
+curl "https://api.telegram.org/bot$TELEGRAM_BOT_TOKEN/getWebhookInfo"
+
+# Test health endpoint
+curl -f https://your-domain.com/health
+```
+
+### External Nginx Configuration
+
+After running the deployment script, configure your external nginx server to proxy requests to the Buddian services:
+
+```nginx
+server {
+    listen 80;
+    server_name your-domain.com;
+    return 301 https://$server_name$request_uri;
+}
+
+server {
+    listen 443 ssl http2;
+    server_name your-domain.com;
+
+    ssl_certificate /path/to/your/certificate.crt;
+    ssl_certificate_key /path/to/your/private.key;
+
+    location / {
+        proxy_pass http://localhost:8080;
+        proxy_set_header Host $host;
+        proxy_set_header X-Real-IP $remote_addr;
+        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+        proxy_set_header X-Forwarded-Proto $scheme;
+    }
+}
+```
+
+### Verification Commands
+
+After deployment, verify everything is working:
+
+```bash
+# Check service status
+docker compose ps
+
+# View logs
+docker compose logs -f
+
+# Test health endpoint
+curl -f https://your-domain.com/health
+
+# Monitor system resources
+docker stats
+```
+
 ## 🚀 Ubuntu 24.04 Server Deployment
 
 This section provides comprehensive instructions for deploying Buddian on an Ubuntu 24.04 server using Docker Compose with external nginx-host configuration.
