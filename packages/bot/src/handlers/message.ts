@@ -300,12 +300,11 @@ async function processFileMessage(
   }
   
   try {
-    // Get file URL from Telegram
-    const file = await ctx.telegram.getFile(fileId);
-    const fileUrl = `https://api.telegram.org/file/bot${ctx.botInfo.token}/${file.file_path}`;
+    // Get file URL from Telegram (secure method)
+    const fileUrl = await ctx.telegram.getFileLink(fileId);
     
     // Download file
-    const fileBuffer = await contentAnalyzer.download.downloadFile(fileUrl);
+    const fileBuffer = await contentAnalyzer.download.downloadFile(fileUrl.href);
     
     // Determine content type
     const contentType = contentAnalyzer.detectContentType(fileName, mimeType);
@@ -353,15 +352,15 @@ async function processFileMessage(
     
     const resourceId = await resourceService.storeResource(resource);
     
-    logMessageProcessing(
-      telegramLogger,
-      messageId,
-      message.chatId,
-      message.userId,
-      'file_processed',
-      'completed',
-      { resourceId, fileName, contentType }
-    );
+      logMessageProcessing(
+        telegramLogger,
+        messageId,
+        message.chatId,
+        message.userId,
+        'file_processed',
+        'completed',
+        { resourceId, fileName, contentType }
+      );
     
     // Send confirmation to user
     const confirmationMessage = `✅ File processed: ${fileName}\n📄 ${analysisResult.summary}`;

@@ -1,4 +1,4 @@
-import { OpenAI } from 'openai';
+import OpenAI from 'openai';
 import { openaiConfig, visionConfig } from '@/config/env';
 import { openaiLogger, logError, logApiCall } from '@/utils/logger';
 import { 
@@ -435,7 +435,7 @@ export const visionService = {
         // This would use Azure Computer Vision API
         // For now, we'll use OpenAI's vision capabilities as a fallback
         const response = await openai.chat.completions.create({
-          model: 'gpt-4-vision-preview',
+          model: openaiConfig.deploymentName,
           messages: [
             {
               role: 'system',

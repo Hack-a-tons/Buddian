@@ -18,7 +18,7 @@ const convex = new ConvexClient(convexConfig.url);
 
 // Set authentication if admin key is provided
 if (convexConfig.adminKey) {
-  convex.setAuth(convexConfig.adminKey);
+  convex.setAuth(async () => convexConfig.adminKey);
 }
 
 // Connection management

@@ -22,7 +22,7 @@ WORKDIR /app
 
 # Copy package files
 COPY packages/bot/package*.json ./
-COPY package*.json ../
+COPY convex ./convex
 
 # Install dependencies
 FROM base AS dependencies
@@ -40,6 +40,8 @@ FROM base AS build
 RUN npm ci
 COPY packages/bot/tsconfig.json ./
 COPY packages/bot/src ./src
+COPY convex ./convex
+RUN npx convex codegen || echo "Convex codegen failed, continuing..."
 RUN npm run build
 
 # Production stage
@@ -69,6 +71,7 @@ WORKDIR /app
 # Copy production dependencies
 COPY --from=dependencies --chown=buddian:nodejs /app/node_modules ./node_modules
 COPY --from=build --chown=buddian:nodejs /app/dist ./dist
+COPY --from=build --chown=buddian:nodejs /app/convex ./convex
 COPY --chown=buddian:nodejs packages/bot/package.json ./
 
 # Create necessary directories
@@ -89,4 +92,4 @@ HEALTHCHECK --interval=30s --timeout=10s --start-period=40s --retries=3 \
 ENTRYPOINT ["dumb-init", "--"]
 
 # Start the application
-CMD ["node", "dist/index.js"]
+CMD ["node", "-r", "tsconfig-paths/register", "dist/index.js"]

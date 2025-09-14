@@ -8,9 +8,13 @@ import { BotContext } from '@/types';
 import handleMessage from '@/handlers/message';
 import commandHandlers from '@/handlers/commands';
 import convexService from '@/services/convex';
+import openaiService from '@/services/openai';
 
 // Initialize Express app for health checks and webhooks
 const app = express();
+
+// Server reference for graceful shutdown
+let server: import('http').Server | undefined;
 
 // Middleware
 app.use(helmet());
@@ -28,7 +32,13 @@ app.get('/health', (req, res) => {
 });
 
 // Webhook endpoint (for production)
-app.post(`/webhook/${config.telegram.token}`, (req, res) => {
+app.post('/webhook/telegram', (req, res) => {
+  // Verify webhook secret
+  const secretToken = req.headers['x-telegram-bot-api-secret-token'];
+  if (secretToken !== process.env.TELEGRAM_WEBHOOK_SECRET) {
+    return res.status(401).send('Unauthorized');
+  }
+  
   bot.handleUpdate(req.body);
   res.sendStatus(200);
 });
@@ -124,7 +134,7 @@ async function startApplication() {
     botLogger.info('✅ Database connection established');
     
     // Test AI service connection
-    const aiHealthy = await convexService.health.checkConnection();
+    const aiHealthy = await openaiService.health.checkConnection();
     if (!aiHealthy) {
       botLogger.warn('⚠️ AI service connection failed - some features may be limited');
     } else {
@@ -132,25 +142,28 @@ async function startApplication() {
     }
     
     // Start Express server
-    const server = app.listen(config.app.port, () => {
+    server = app.listen(config.app.port, () => {
       botLogger.info(`🚀 Express server listening on port ${config.app.port}`);
     });
     
     // Set up webhook or polling based on environment
     if (config.app.nodeEnv === 'production' && config.telegram.webhookUrl) {
       // Production: Use webhooks
-      await bot.telegram.setWebhook(`${config.telegram.webhookUrl}/webhook/${config.telegram.token}`);
+      const webhookOptions: any = {};
+      if (process.env['TELEGRAM_WEBHOOK_SECRET']) {
+        webhookOptions.secret_token = process.env['TELEGRAM_WEBHOOK_SECRET'];
+      }
+      await bot.telegram.setWebhook(`${config.telegram.webhookUrl}/webhook/telegram`, webhookOptions);
       botLogger.info('🔗 Webhook configured for production');
     } else {
       // Development: Use polling
-      await bot.launch();
+      await bot.launch({
+        allowed_updates: config.telegram.allowedUpdates
+      });
       botLogger.info('🔄 Bot started with polling for development');
     }
     
     botLogger.info('🤖 Buddian bot is now running!');
-    
-    // Export server for graceful shutdown
-    global.server = server;
     
   } catch (error) {
     logError(botLogger, error as Error, {
@@ -162,13 +175,6 @@ async function startApplication() {
   }
 }
 
-// Global server reference for shutdown
-declare global {
-  var server: any;
-}
 
 // Start the application
 startApplication();
-
-// Export for testing
-export { bot, app };

@@ -9,6 +9,8 @@ dotenv.config();
 const envSchema = z.object({
   // Telegram configuration
   TELEGRAM_BOT_TOKEN: z.string().min(1, 'Telegram bot token is required'),
+  TELEGRAM_WEBHOOK_SECRET: z.string().optional(),
+  TELEGRAM_WEBHOOK_BASE_URL: z.string().url().optional(),
   
   // Convex configuration
   CONVEX_URL: z.string().url('Invalid Convex URL'),
@@ -63,6 +65,7 @@ const env = parseResult.data;
 export const config: BotConfig = {
   telegram: {
     token: env.TELEGRAM_BOT_TOKEN,
+    ...(env.TELEGRAM_WEBHOOK_BASE_URL && { webhookUrl: env.TELEGRAM_WEBHOOK_BASE_URL }),
     allowedUpdates: [
       'message',
       'edited_message',
@@ -83,10 +86,12 @@ export const config: BotConfig = {
     apiVersion: env.AZURE_OPENAI_API_VERSION,
     deploymentName: env.AZURE_OPENAI_DEPLOYMENT_NAME,
   },
-  vision: env.AZURE_VISION_ENDPOINT && env.AZURE_VISION_KEY ? {
-    endpoint: env.AZURE_VISION_ENDPOINT,
-    apiKey: env.AZURE_VISION_KEY,
-  } : undefined,
+  ...(env.AZURE_VISION_ENDPOINT && env.AZURE_VISION_KEY && {
+    vision: {
+      endpoint: env.AZURE_VISION_ENDPOINT,
+      apiKey: env.AZURE_VISION_KEY,
+    }
+  }),
   app: {
     port: env.PORT,
     logLevel: env.LOG_LEVEL,
