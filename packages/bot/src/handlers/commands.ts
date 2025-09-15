@@ -1,5 +1,5 @@
 import { BotContext } from '@/types';
-import { messageService, userService, resourceService } from '@/services/convex';
+import { messageService, userService, resourceService } from '@/services/supabase';
 import openaiService from '@/services/openai';
 import languageUtils from '@/utils/language';
 import { telegramLogger, logError, logUserAction } from '@/utils/logger';

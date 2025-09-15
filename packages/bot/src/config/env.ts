@@ -12,10 +12,10 @@ const envSchema = z.object({
   TELEGRAM_WEBHOOK_SECRET: z.string().optional(),
   TELEGRAM_WEBHOOK_BASE_URL: z.string().url().optional(),
   
-  // Convex configuration
-  CONVEX_URL: z.string().url('Invalid Convex URL'),
-  CONVEX_DEPLOYMENT: z.string().min(1, 'Convex deployment is required'),
-  CONVEX_ADMIN_KEY: z.string().min(1, 'Convex admin key is required'),
+  // Supabase configuration
+  SUPABASE_URL: z.string().url('Invalid Supabase URL'),
+  SUPABASE_ANON_KEY: z.string().min(1, 'Supabase anon key is required'),
+  SUPABASE_SERVICE_ROLE_KEY: z.string().min(1, 'Supabase service role key is required'),
   
   // Azure OpenAI configuration
   AZURE_OPENAI_ENDPOINT: z.string().url('Invalid Azure OpenAI endpoint'),
@@ -81,10 +81,10 @@ export const config: BotConfig = {
     ...(env.TELEGRAM_WEBHOOK_BASE_URL && { webhookUrl: env.TELEGRAM_WEBHOOK_BASE_URL }),
     allowedUpdates,
   },
-  convex: {
-    url: env.CONVEX_URL,
-    deployment: env.CONVEX_DEPLOYMENT,
-    adminKey: env.CONVEX_ADMIN_KEY,
+  supabase: {
+    url: env.SUPABASE_URL,
+    anonKey: env.SUPABASE_ANON_KEY,
+    serviceRoleKey: env.SUPABASE_SERVICE_ROLE_KEY,
   },
   openai: {
     endpoint: env.AZURE_OPENAI_ENDPOINT,
@@ -121,7 +121,7 @@ export const config: BotConfig = {
 
 // Export individual config sections for convenience
 export const telegramConfig = config.telegram;
-export const convexConfig = config.convex;
+export const supabaseConfig = config.supabase;
 export const openaiConfig = config.openai;
 export const visionConfig = config.vision;
 export const appConfig = config.app;
@@ -137,8 +137,8 @@ export const isTest = env.NODE_ENV === 'test';
 export function validateRequiredEnvVars(): void {
   const required = [
     'TELEGRAM_BOT_TOKEN',
-    'CONVEX_URL',
-    'CONVEX_ADMIN_KEY',
+    'SUPABASE_URL',
+    'SUPABASE_SERVICE_ROLE_KEY',
     'AZURE_OPENAI_ENDPOINT',
     'AZURE_OPENAI_KEY',
   ];

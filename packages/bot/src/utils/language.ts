@@ -1,5 +1,5 @@
 import openaiService from '@/services/openai';
-import { userService } from '@/services/convex';
+import { userService } from '@/services/supabase';
 import { contentLogger, logError } from '@/utils/logger';
 import { LanguageDetectionResult } from '@/types';
 

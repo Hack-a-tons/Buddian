@@ -8,7 +8,7 @@ import { botLogger, logStartup, logShutdown, logError } from '@/utils/logger';
 import { BotContext } from '@/types';
 import { handleMessage } from '@/handlers/message';
 import commandHandlers from '@/handlers/commands';
-import convexService from '@/services/convex';
+import databaseService from '@/services/supabase';
 import openaiService from '@/services/openai';
 import { pluginManager } from '@/plugins/manager';
 
@@ -115,7 +115,7 @@ const gracefulShutdown = async (signal: string) => {
   }
   
   // Close database connections
-  convexService.cleanup();
+  databaseService.cleanup();
   
   // Close Express server if it exists
   if (server) {
@@ -170,7 +170,7 @@ async function startApplication() {
     logConfiguration();
     
     // Test database connection
-    const dbHealthy = await convexService.health.checkConnection();
+    const dbHealthy = await databaseService.health.checkConnection();
     if (!dbHealthy) {
       throw new Error('Database connection failed');
     }

@@ -205,10 +205,10 @@ export interface BotConfig {
     webhookUrl?: string;
     allowedUpdates: Telegraf.LaunchOptions['allowedUpdates'];
   };
-  convex: {
+  supabase: {
     url: string;
-    deployment: string;
-    adminKey: string;
+    anonKey: string;
+    serviceRoleKey: string;
   };
   openai: {
     endpoint: string;
@@ -259,10 +259,10 @@ export class ValidationError extends BuddianError {
   }
 }
 
-export class ConvexError extends BuddianError {
+export class DatabaseError extends BuddianError {
   constructor(message: string, context?: Record<string, any>) {
-    super(message, 'CONVEX_ERROR', 500, context);
-    this.name = 'ConvexError';
+    super(message, 'DATABASE_ERROR', 500, context);
+    this.name = 'DatabaseError';
   }
 }
 

@@ -1,5 +1,5 @@
 import { Message } from 'telegraf/typings/core/types/typegram';
-import { messageService, userService, resourceService } from '@/services/convex';
+import { messageService, userService, resourceService } from '@/services/supabase';
 import openaiService from '@/services/openai';
 import contentAnalyzer from '@/services/content-analyzer';
 import languageUtils from '@/utils/language';

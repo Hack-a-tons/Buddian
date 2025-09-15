@@ -35,7 +35,7 @@ export const createChildLogger = (component: string) => {
 
 // Specialized loggers for different parts of the application
 export const botLogger = createChildLogger('bot');
-export const convexLogger = createChildLogger('convex');
+export const databaseLogger = createChildLogger('database');
 export const openaiLogger = createChildLogger('openai');
 export const telegramLogger = createChildLogger('telegram');
 export const pluginLogger = createChildLogger('plugin');
